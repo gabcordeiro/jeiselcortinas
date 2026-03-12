@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, MagnifyingGlass, Check, XCircle, X, MathOperations, Palette, Scissors, Wrench, Ruler, HardHat } from "@phosphor-icons/react";
+import { Plus, MagnifyingGlass, Check, XCircle, X, MathOperations, Palette, Scissors, Wrench, Ruler, HardHat, PencilSimple } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import { DB } from "@/lib/data"; // Mantemos apenas Costuras aqui
+import { DB } from "@/lib/data"; 
 
 // --- Funções Auxiliares de Cálculo ---
 function calcularConsumoBK(largura: number) {
@@ -22,7 +22,7 @@ export default function Orcamentos() {
   // Estados dos Dados Dinâmicos do Banco
   const [dbTecidos, setDbTecidos] = useState<any[]>([]);
   const [dbForros, setDbForros] = useState<any[]>([]);
-  const [dbModelos, setDbModelos] = useState<any[]>([]); // <- Novo: Modelos dinâmicos
+  const [dbModelos, setDbModelos] = useState<any[]>([]);
   const [dbTaxas, setDbTaxas] = useState<any>({});
   const [pricesLoaded, setPricesLoaded] = useState(false);
 
@@ -31,6 +31,12 @@ export default function Orcamentos() {
   const [km, setKm] = useState(0);
   const [cart, setCart] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Estado de Edição do Pedido Global (Vindo do Histórico)
+  const [editId, setEditId] = useState<number | null>(null);
+  
+  // --- NOVO: ESTADO DE EDIÇÃO DO ITEM DO CARRINHO ---
+  const [editingCartItemId, setEditingCartItemId] = useState<number | null>(null);
 
   const [nomeAmbiente, setNomeAmbiente] = useState("");
   const [largura, setLargura] = useState("");
@@ -54,7 +60,7 @@ export default function Orcamentos() {
         
         const modelosBanco = mats.filter(m => m.categoria === 'modelo');
         setDbModelos(modelosBanco);
-        if (modelosBanco.length > 0) setModeloId(modelosBanco[0].id); // Seleciona o primeiro por padrão
+        if (modelosBanco.length > 0) setModeloId(modelosBanco[0].id);
       }
 
       if (taxes) {
@@ -66,13 +72,24 @@ export default function Orcamentos() {
     loadPrices();
   }, []);
 
+  // --- CARREGA DADOS PARA EDIÇÃO (SE HOUVER DO HISTÓRICO) ---
+  useEffect(() => {
+    const editData = localStorage.getItem('jeisel_edit_pedido');
+    if (editData) {
+      const pedido = JSON.parse(editData);
+      setCart(pedido.itens || []);
+      setCliente(pedido.cliente || "");
+      setEditId(pedido.id); 
+      localStorage.removeItem('jeisel_edit_pedido'); 
+    }
+  }, []);
+
   // --- CÁLCULO DE FERRAGENS (DINÂMICO) ---
   const ferragensOptions = useMemo(() => {
     let options = [{ id: 'nenhum', nome: 'Cliente já possui trilho/varão', preco: 0 }];
     const temTecido = tecidoId !== 'nenhum';
     const temForro = forroId !== 'nenhum';
     
-    // Verifica se o modelo selecionado é Ilhós (pelo nome, já que o ID agora é um UUID do banco)
     const modeloAtual = dbModelos.find(m => m.id === modeloId);
     const isIlhos = modeloAtual?.nome.toLowerCase().includes('ilhós');
 
@@ -88,12 +105,13 @@ export default function Orcamentos() {
     return options;
   }, [modeloId, tecidoId, forroId, dbModelos]);
 
+  // --- ADICIONAR OU ATUALIZAR ITEM NO CARRINHO ---
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     const largNum = parseFloat(largura);
     const altNum = parseFloat(altura);
 
-    const modObj = dbModelos.find(m => m.id === modeloId); // Busca do banco agora!
+    const modObj = dbModelos.find(m => m.id === modeloId);
     const tecObj = dbTecidos.find(t => t.id === tecidoId);
     const forObj = dbForros.find(f => f.id === forroId);
     const cstObj = DB.costuras.find(c => c.id === costuraId)!;
@@ -130,18 +148,54 @@ export default function Orcamentos() {
       detalhes.push({ tipo: 'Ferragem', icon: <Wrench size={20} className="text-gray-500" />, nome: "Suporte/Trilho", equacao: `${largNum}m × ${formatBRL(ferragemPreco)}/m`, valor: custoFer });
     }
 
-    setCart([...cart, {
-      id: Date.now(),
+    // Objeto do Item Finalizado
+    const newItem = {
+      id: editingCartItemId || Date.now(), // Mantém o ID se estiver editando
       nome: nomeAmbiente, largura: largNum, altura: altNum, servico: servicoId,
       desc: `${modObj.nome} | ${tecObj.nome} | ${forObj.nome}`,
       mat_cost: custoTec + custoFor + custoCst + custoFer,
-      detalhes_array: detalhes
-    }]);
+      detalhes_array: detalhes,
+      // Salva os IDs para podermos editar depois
+      tecidoId: tecObj.id,
+      forroId: forObj.id,
+      modeloId: modObj.id,
+      ferragemPreco: ferragemPreco
+    };
+
+    if (editingCartItemId) {
+      // Substitui o item antigo pelo novo corrigido
+      setCart(cart.map(i => i.id === editingCartItemId ? newItem : i));
+      setEditingCartItemId(null); // Sai do modo de edição
+    } else {
+      // Adiciona um item novo na lista
+      setCart([...cart, newItem]);
+    }
     
+    // Limpa apenas os campos de texto para agilizar a próxima janela
     setNomeAmbiente(""); setLargura(""); setAltura("");
   };
 
   const delItem = (id: number) => setCart(cart.filter(i => i.id !== id));
+
+  // --- NOVA FUNÇÃO: PUXAR ITEM DO CARRINHO PRO FORMULÁRIO ---
+  const editCartItem = (item: any) => {
+    setNomeAmbiente(item.nome);
+    setLargura(item.largura.toString());
+    setAltura(item.altura.toString());
+    
+    // Puxa as seleções se elas existirem no objeto (itens antigos podem não ter)
+    if (item.tecidoId) setTecidoId(item.tecidoId);
+    if (item.forroId) setForroId(item.forroId);
+    if (item.modeloId) setModeloId(item.modeloId);
+    if (item.ferragemPreco !== undefined) setFerragemPreco(item.ferragemPreco);
+
+    setEditingCartItemId(item.id);
+  };
+
+  const cancelCartItemEdit = () => {
+    setEditingCartItemId(null);
+    setNomeAmbiente(""); setLargura(""); setAltura("");
+  };
 
   // --- TOTAIS GLOBAIS (USANDO TAXAS DO BANCO) ---
   const totais = useMemo(() => {
@@ -157,7 +211,6 @@ export default function Orcamentos() {
       if (item.servico === 'retirar') { mtPadrao += item.largura; mtRetirada += item.largura; }
     });
 
-    // Cálculos de Instalação usando dbTaxas
     let calcInst = (mtPadrao * dbTaxas.inst_padrao) + (mtAlta * dbTaxas.inst_alta) + (mtRetirada * dbTaxas.retirada);
     if (mtPadrao > 0) globalDetalhes.push({ nome: 'Instalação Padrão', desc: `${mtPadrao.toFixed(2)}m`, valor: mtPadrao * dbTaxas.inst_padrao });
     if (mtAlta > 0) globalDetalhes.push({ nome: 'Pé Direito Alto', desc: `${mtAlta.toFixed(2)}m`, valor: mtAlta * dbTaxas.inst_alta });
@@ -180,29 +233,40 @@ export default function Orcamentos() {
     return { mat: totalMat, inst: totalInst, desl: totalDesloc, total: totalMat + totalInst + totalDesloc, globalDetalhes, taxaMinimaAplicada };
   }, [cart, km, dbTaxas, pricesLoaded]);
 
-// --- FINALIZAR PEDIDO ---
+  // --- FINALIZAR OU EDITAR PEDIDO ---
   const finalizarPedido = async () => {
     if (cart.length === 0) return alert("Adicione itens!");
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase.from('pedidos').insert([{ 
+    const payload = {
       cliente: cliente || "Consumidor", 
       total: totais.total, 
       vendedor: user?.email,
       status: 'andamento',
-      qtd_janelas: cart.length, // <--- FALTAVA ESSA LINHA AQUI!
+      qtd_janelas: cart.length,
       itens: cart,
       totais_data: {
         mat: totais.mat, inst: totais.inst, desl: totais.desl,
         globalDetalhes: totais.globalDetalhes, taxaMinimaAplicada: totais.taxaMinimaAplicada
       },
       data: new Date().toLocaleDateString('pt-BR')
-    }]);
+    };
+
+    let error;
+
+    if (editId) {
+      const res = await supabase.from('pedidos').update(payload).eq('id', editId);
+      error = res.error;
+    } else {
+      const res = await supabase.from('pedidos').insert([payload]);
+      error = res.error;
+    }
 
     if (!error) { 
       setCart([]); 
       setCliente(""); 
       setKm(0); 
+      setEditId(null); 
       router.push('/historico'); 
     }
     else alert("Erro: " + error.message);
@@ -214,6 +278,23 @@ export default function Orcamentos() {
     <>
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-6">
         <div className="space-y-6">
+            
+            {/* AVISO VISUAL DE EDIÇÃO DE PEDIDO GLOBAL */}
+            {editId && (
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex items-center justify-between shadow-sm">
+                <div>
+                  <strong className="block text-sm">Modo de Edição Ativo</strong>
+                  <span className="text-xs">Você está editando o Pedido #{editId}. Suas alterações substituirão o pedido original.</span>
+                </div>
+                <button 
+                  onClick={() => { setEditId(null); setCart([]); setCliente(""); }} 
+                  className="px-3 py-1.5 bg-indigo-200 text-indigo-800 rounded-md text-xs font-bold hover:bg-indigo-300 transition"
+                >
+                  Cancelar Edição
+                </button>
+              </div>
+            )}
+
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <h3 className="text-lg font-semibold text-blue-600 mb-4 pb-2 border-b">Dados do Cliente</h3>
               <div className="flex flex-wrap gap-4">
@@ -222,35 +303,45 @@ export default function Orcamentos() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-blue-600 mb-4 pb-2 border-b">Janela/Ambiente</h3>
+            <div className={`bg-white p-6 rounded-lg border shadow-sm transition-all duration-300 ${editingCartItemId ? 'border-indigo-400 ring-4 ring-indigo-50' : 'border-gray-200'}`}>
+              <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 className={`text-lg font-semibold ${editingCartItemId ? 'text-indigo-600' : 'text-blue-600'}`}>
+                  {editingCartItemId ? 'Editando Ambiente...' : 'Janela/Ambiente'}
+                </h3>
+                {editingCartItemId && (
+                  <button onClick={cancelCartItemEdit} className="text-xs text-gray-400 hover:text-red-500 font-bold">
+                    Cancelar Edição
+                  </button>
+                )}
+              </div>
+
               <form onSubmit={handleAddItem} className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
-                  <input type="text" value={nomeAmbiente} onChange={(e)=>setNomeAmbiente(e.target.value)} placeholder="Ambiente (Ex: Sala)" className="p-2.5 border rounded-md" required />
-                  <input type="number" step="0.01" value={largura} onChange={(e)=>setLargura(e.target.value)} placeholder="Largura (m)" className="p-2.5 border rounded-md" required />
-                  <input type="number" step="0.01" value={altura} onChange={(e)=>setAltura(e.target.value)} placeholder="Altura (m)" className="p-2.5 border rounded-md" required />
+                  <input type="text" value={nomeAmbiente} onChange={(e)=>setNomeAmbiente(e.target.value)} placeholder="Ambiente (Ex: Sala)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
+                  <input type="number" step="0.01" value={largura} onChange={(e)=>setLargura(e.target.value)} placeholder="Largura (m)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
+                  <input type="number" step="0.01" value={altura} onChange={(e)=>setAltura(e.target.value)} placeholder="Altura (m)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="p-2.5 border rounded-md bg-white">
+                  <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
                     {dbTecidos.map(t => <option key={t.id} value={t.id}>{t.nome} (R$ {t.preco}/m)</option>)}
                   </select>
-                  <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="p-2.5 border rounded-md bg-white">
+                  <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
                     {dbForros.map(f => <option key={f.id} value={f.id}>{f.nome} (R$ {f.preco}/m)</option>)}
                   </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <select value={modeloId} onChange={(e)=>setModeloId(e.target.value)} className="p-2.5 border rounded-md bg-white">
+                  <select value={modeloId} onChange={(e)=>setModeloId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
                     {dbModelos.map(m => <option key={m.id} value={m.id}>{m.nome} (Fator {m.fator})</option>)}
                   </select>
-                  <select value={ferragemPreco} onChange={(e)=>setFerragemPreco(Number(e.target.value))} className="p-2.5 border rounded-md bg-white">
+                  <select value={ferragemPreco} onChange={(e)=>setFerragemPreco(Number(e.target.value))} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
                     {ferragensOptions.map(f => <option key={f.id} value={f.preco}>{f.nome}</option>)}
                   </select>
                 </div>
 
-                <button type="submit" className="w-full p-3 bg-blue-600 text-white rounded-md font-bold flex items-center justify-center gap-2">
-                  <Plus size={20} weight="bold" /> Adicionar Ambiente
+                <button type="submit" className={`w-full p-3 text-white rounded-md font-bold flex items-center justify-center gap-2 transition-colors ${editingCartItemId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {editingCartItemId ? <><Check size={20} weight="bold" /> Atualizar Ambiente</> : <><Plus size={20} weight="bold" /> Adicionar Ambiente</>}
                 </button>
               </form>
             </div>
@@ -260,18 +351,25 @@ export default function Orcamentos() {
         <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm sticky top-6">
           <h3 className="text-lg font-semibold text-blue-600 mb-4 border-b pb-2">Resumo do Pedido</h3>
           
-          <div className="max-h-[250px] overflow-y-auto mb-4 space-y-3">
+          <div className="max-h-[300px] overflow-y-auto mb-4 space-y-3 px-1">
             {cart.length === 0 ? (
               <div className="text-sm text-gray-500 italic text-center py-4">Nenhum item adicionado ainda.</div>
             ) : (
               cart.map(item => (
-                <div key={item.id} className="border border-gray-200 p-3 rounded-md relative group bg-gray-50 hover:bg-white transition-colors">
+                <div key={item.id} className={`border p-3 rounded-md relative group transition-colors ${editingCartItemId === item.id ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}>
                   <h4 className="font-semibold text-sm text-gray-800">{item.nome} ({item.largura}x{item.altura}m)</h4>
                   <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
                   <p className="text-sm mt-1 text-gray-700">Materiais: <strong className="text-blue-600">{formatBRL(item.mat_cost)}</strong></p>
-                  <button type="button" onClick={() => delItem(item.id)} className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 transition">
-                    <XCircle size={20} weight="fill" />
-                  </button>
+                  
+                  {/* BOTÕES DE AÇÃO: EDITAR E EXCLUIR */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex gap-1">
+                    <button type="button" onClick={() => editCartItem(item)} className="p-1 bg-white text-indigo-500 border border-indigo-200 rounded hover:bg-indigo-500 hover:text-white transition shadow-sm">
+                      <PencilSimple size={16} weight="bold" />
+                    </button>
+                    <button type="button" onClick={() => delItem(item.id)} className="p-1 bg-white text-red-500 border border-red-200 rounded hover:bg-red-500 hover:text-white transition shadow-sm">
+                      <X size={16} weight="bold" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -289,8 +387,9 @@ export default function Orcamentos() {
           <button onClick={() => { if (cart.length === 0) return alert("Adicione itens primeiro!"); setIsModalOpen(true); }} className="w-full mt-6 p-3 bg-transparent border border-gray-300 text-gray-700 rounded-md font-semibold flex items-center justify-center gap-2 hover:bg-gray-50 transition">
             <MagnifyingGlass size={20} /> Ver Detalhes do Cálculo
           </button>
-          <button onClick={finalizarPedido} className="w-full mt-3 p-3 bg-emerald-500 text-white rounded-md font-bold shadow-md hover:bg-emerald-600 transition">
-            <Check size={20} weight="bold" /> Finalizar Pedido
+          
+          <button onClick={finalizarPedido} className={`w-full mt-3 p-3 text-white rounded-md font-bold shadow-md transition flex items-center justify-center gap-2 ${editId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
+            <Check size={20} weight="bold" /> {editId ? `Salvar Alterações (#${editId})` : "Finalizar Pedido"}
           </button>
         </div>
       </div>
@@ -359,7 +458,7 @@ export default function Orcamentos() {
                   
                   {totais.taxaMinimaAplicada && (
                     <div className="px-5 py-3 bg-amber-50 text-amber-800 text-xs font-medium flex items-center gap-2">
-                       ⚠️ Valor ajustado para o Piso Mínimo Residencial ({formatBRL(dbTaxas.min_resid)}).
+                        ⚠️ Valor ajustado para o Piso Mínimo Residencial ({formatBRL(dbTaxas.min_resid)}).
                     </div>
                   )}
                 </div>

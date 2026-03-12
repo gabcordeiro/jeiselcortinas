@@ -1,24 +1,29 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
   Trash, MagnifyingGlass, Eye, X, Ruler, MathOperations, 
   CheckCircle, Clock, Prohibit, FilePdf, 
-  CaretDown, Warning, FileXls 
+  CaretDown, Warning, FileXls, PencilSimple 
 } from "@phosphor-icons/react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx"; // Importação da biblioteca de Excel
+import * as XLSX from "xlsx"; 
 
 export default function Historico() {
+  const router = useRouter();
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("USER");
   const [loading, setLoading] = useState(true);
+  
+  // Estados para Modais
   const [selectedPedido, setSelectedPedido] = useState<any>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [idToDelete, setIdToDelete] = useState<number | null>(null);
+
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({
     key: 'created_at',
     direction: 'desc'
@@ -41,7 +46,6 @@ export default function Historico() {
 
   // --- FUNÇÃO DE EXPORTAR EXCEL ---
   const exportarExcel = () => {
-    // 1. Prepara os dados (limpa o que não precisa ir para a planilha)
     const dadosExcel = pedidosProcessados.map(p => ({
       ID: p.id,
       Data: p.data,
@@ -52,32 +56,28 @@ export default function Historico() {
       Valor_Total: p.total
     }));
 
-    // 2. Cria a planilha
     const ws = XLSX.utils.json_to_sheet(dadosExcel);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
 
-    // 3. Define o nome do arquivo com o mês/ano atual
     const dataAtual = new Date();
     const nomeArquivo = `Fechamento_Jeisel_${dataAtual.getMonth() + 1}_${dataAtual.getFullYear()}.xlsx`;
 
-    // 4. Salva o arquivo
     XLSX.writeFile(wb, nomeArquivo);
   };
 
   const formatBRL = (v: number) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
 
-// --- FUNÇÃO DE PDF PREMIUM PARA WHATSAPP ---
+  // --- FUNÇÃO DE PDF PREMIUM PARA WHATSAPP ---
   const emitirPDF = (p: any) => {
     const doc = new jsPDF();
     
-    // --- 1. CABEÇALHO (LOGO E IDENTIDADE) ---
-    doc.setFillColor(37, 99, 235); // Fundo Azul
-    doc.rect(0, 0, 210, 15, 'F'); // Faixa superior
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, 210, 15, 'F');
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(26);
-    doc.setTextColor(37, 99, 235); // Azul principal
+    doc.setTextColor(37, 99, 235);
     doc.text("JEISEL CORTINAS", 14, 30);
     
     doc.setFontSize(10);
@@ -85,15 +85,11 @@ export default function Historico() {
     doc.setFont("helvetica", "normal");
     doc.text("Orçamento Exclusivo sob Medida", 14, 36);
     
-    // Linha divisória
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
     doc.line(14, 42, 196, 42);
 
-    // --- 2. DADOS DO CLIENTE E PEDIDO ---
     doc.setFontSize(10);
-    
-    // Coluna 1: Cliente
     doc.setFont("helvetica", "bold");
     doc.setTextColor(50, 50, 50);
     doc.text("DADOS DO CLIENTE", 14, 52);
@@ -101,18 +97,14 @@ export default function Historico() {
     doc.text(`Nome: ${p.cliente}`, 14, 58);
     doc.text(`Data de Emissão: ${p.data}`, 14, 64);
 
-    // Coluna 2: Pedido
     doc.setFont("helvetica", "bold");
     doc.text("INFORMAÇÕES DO PEDIDO", 120, 52);
     doc.setFont("helvetica", "normal");
     doc.text(`Código do Pedido: #${p.id}`, 120, 58);
     
-    // --- 3. CONSTRUÇÃO DA TABELA (MEMÓRIA DE CÁLCULO) ---
     const tableBody: any[] = [];
 
-    // Lista os Ambientes/Janelas
     p.itens?.forEach((item: any, index: number) => {
-      // Linha de Cabeçalho do Ambiente (Fundo Azul Claro)
       tableBody.push([
         { 
           content: `AMBIENTE ${index + 1}: ${item.nome.toUpperCase()} (${item.largura}m larg. x ${item.altura}m alt.)`, 
@@ -121,21 +113,17 @@ export default function Historico() {
         }
       ]);
       
-      // Detalhes da Janela (Tecido, Forro, Costura, Ferragem)
       item.detalhes_array?.forEach((det: any) => {
         tableBody.push([det.tipo, det.nome, formatBRL(det.valor)]);
       });
       
-      // Subtotal do Ambiente
       tableBody.push([
         { content: 'Subtotal do Ambiente:', colSpan: 2, styles: { halign: 'right', fontStyle: 'italic', textColor: [100, 100, 100] } }, 
         { content: formatBRL(item.mat_cost), styles: { fontStyle: 'bold', textColor: [50, 50, 50] } }
       ]);
     });
 
-    // Seção de Taxas Globais (Mão de Obra e Deslocamento)
     if (p.totais_data?.globalDetalhes?.length > 0) {
-      // Linha de Cabeçalho de Serviços (Fundo Verde Claro)
       tableBody.push([
         { 
           content: `MÃO DE OBRA E DESLOCAMENTO`, 
@@ -149,13 +137,12 @@ export default function Historico() {
       });
     }
 
-    // Gerar a Tabela
     autoTable(doc, {
       startY: 72,
       head: [['Item / Serviço', 'Descrição Técnica', 'Valor']],
       body: tableBody,
       theme: 'grid',
-      headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontStyle: 'bold' }, // Cinza Escuro
+      headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontStyle: 'bold' },
       styles: { fontSize: 9, cellPadding: 4 },
       columnStyles: {
         0: { cellWidth: 40, fontStyle: 'bold' },
@@ -164,12 +151,10 @@ export default function Historico() {
       }
     });
 
-    // --- 4. RODAPÉ E VALOR TOTAL ---
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     
-    // Caixa de Total
-    doc.setFillColor(240, 253, 244); // Fundo verde bem claro
-    doc.setDrawColor(16, 185, 129); // Borda Emerald 500
+    doc.setFillColor(240, 253, 244);
+    doc.setDrawColor(16, 185, 129);
     doc.rect(110, finalY - 8, 86, 20, 'FD');
     
     doc.setFontSize(12);
@@ -178,17 +163,15 @@ export default function Historico() {
     doc.text("TOTAL GERAL:", 115, finalY + 4);
     
     doc.setFontSize(16);
-    doc.setTextColor(5, 150, 105); // Verde Emerald 600
+    doc.setTextColor(5, 150, 105);
     doc.text(formatBRL(p.total), 190, finalY + 5, { align: "right" });
 
-    // Mensagem de Validade
     doc.setFontSize(9);
     doc.setTextColor(150, 150, 150);
     doc.setFont("helvetica", "italic");
     doc.text("Orçamento válido por 10 dias. Valores sujeitos a alteração após o prazo.", 105, 280, { align: "center" });
     doc.text("Agradecemos a preferência!", 105, 285, { align: "center" });
 
-    // --- 5. EXPORTA O ARQUIVO ---
     doc.save(`Orcamento_Jeisel_${p.id}_${p.cliente.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -202,6 +185,14 @@ export default function Historico() {
     const { error } = await supabase.from('pedidos').delete().eq('id', idToDelete);
     if (!error) setPedidos(pedidos.filter(p => p.id !== idToDelete));
     setIsDeleteModalOpen(false);
+  };
+
+  // --- NOVA FUNÇÃO: CARREGAR PARA EDIÇÃO ---
+  const carregarParaEdicao = (pedido: any) => {
+    // Salva o pedido na memória do navegador para a página principal ler
+    localStorage.setItem('jeisel_edit_pedido', JSON.stringify(pedido));
+    // Redireciona para a tela inicial (Calculadora)
+    router.push('/');
   };
 
   const handleSort = (key: string) => {
@@ -232,7 +223,6 @@ export default function Historico() {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
         <div className="flex items-center gap-4 w-full md:w-auto">
           <h3 className="text-xl font-bold text-gray-800 whitespace-nowrap">Histórico</h3>
-          {/* BOTÃO EXCEL */}
           <button 
             onClick={exportarExcel}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
@@ -287,6 +277,10 @@ export default function Historico() {
                   <div className="flex justify-center gap-2">
                     <button onClick={() => setSelectedPedido(p)} className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Eye size={18} /></button>
                     <button onClick={() => emitirPDF(p)} className="p-2 text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-600 hover:text-white transition-all"><FilePdf size={18} /></button>
+                    
+                    {/* BOTÃO DE EDITAR AGORA CHAMA A FUNÇÃO DE CARREGAR */}
+                    <button onClick={() => carregarParaEdicao(p)} className="p-2 text-indigo-500 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"><PencilSimple size={18} /></button>
+                    
                     {role === "ADMIN" && (
                       <button onClick={() => { setIdToDelete(p.id); setIsDeleteModalOpen(true); }} className="p-2 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all"><Trash size={18} /></button>
                     )}
