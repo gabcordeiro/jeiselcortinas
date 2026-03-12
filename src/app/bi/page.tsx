@@ -108,7 +108,7 @@ export default function DashboardBI() {
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                 <XAxis type="number" hide />
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} style={{ fontSize: '12px', fontWeight: 'bold' }} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} formatter={(value: number) => formatBRL(value)} />
+                <Tooltip cursor={{ fill: '#f8fafc' }} formatter={(value: any) => formatBRL(Number(value || 0))} />
                 <Bar dataKey="total" fill="#2563EB" radius={[0, 4, 4, 0]} barSize={30} />
               </BarChart>
             </ResponsiveContainer>
