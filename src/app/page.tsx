@@ -35,7 +35,7 @@ export default function Orcamentos() {
   // Estado de Edição do Pedido Global (Vindo do Histórico)
   const [editId, setEditId] = useState<number | null>(null);
   
-  // --- NOVO: ESTADO DE EDIÇÃO DO ITEM DO CARRINHO ---
+  // Estado de Edição do Item do Carrinho
   const [editingCartItemId, setEditingCartItemId] = useState<number | null>(null);
 
   const [nomeAmbiente, setNomeAmbiente] = useState("");
@@ -111,6 +111,9 @@ export default function Orcamentos() {
     const largNum = parseFloat(largura);
     const altNum = parseFloat(altura);
 
+    // ADICIONA 30CM PARA A BAINHA E ACABAMENTO SUPERIOR
+    const consumoAltura = altNum + 0.30; 
+
     const modObj = dbModelos.find(m => m.id === modeloId);
     const tecObj = dbTecidos.find(t => t.id === tecidoId);
     const forObj = dbForros.find(f => f.id === forroId);
@@ -121,28 +124,48 @@ export default function Orcamentos() {
 
     let detalhes = [];
     
-    // 1. Cálculo Tecido
+    // 1. Cálculo Tecido (Área M²: Largura x Fator x Altura com bainha)
     let custoTec = 0;
     if (tecObj.id !== 'nenhum') {
-      let metTec = largNum * modObj.fator;
-      custoTec = metTec * tecObj.preco;
-      detalhes.push({ tipo: 'Tecido', icon: <Palette size={20} className="text-blue-500" />, nome: tecObj.nome, equacao: `${largNum}m × ${modObj.fator} (Fator ${modObj.nome}) = ${metTec.toFixed(2)}m`, valor: custoTec });
+      let areaTec = (largNum * modObj.fator) * consumoAltura;
+      custoTec = areaTec * tecObj.preco;
+      detalhes.push({ 
+        tipo: 'Tecido', 
+        icon: <Palette size={20} className="text-blue-500" />, 
+        nome: tecObj.nome, 
+        equacao: `(${largNum}m × ${modObj.fator}) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaTec.toFixed(2)}m²`, 
+        valor: custoTec 
+      });
     }
 
-    // 2. Cálculo Forro
+    // 2. Cálculo Forro (Área M²)
     let custoFor = 0;
     if (forObj.id !== 'nenhum') {
-      let metForro = (forObj.tipo_bk) ? calcularConsumoBK(largNum) : (largNum * (forObj.fator || 1));
-      custoFor = metForro * forObj.preco;
-      detalhes.push({ tipo: 'Forro', icon: <Palette size={20} className="text-purple-500" />, nome: forObj.nome, equacao: `${metForro.toFixed(2)}m × ${formatBRL(forObj.preco)}/m`, valor: custoFor });
+      let areaForro = 0;
+      let eqForro = "";
+      
+      if (forObj.tipo_bk) {
+        // Se for Blackout, usa a fórmula de emendas e multiplica pela altura final
+        let larguraBK = calcularConsumoBK(largNum);
+        areaForro = larguraBK * consumoAltura;
+        eqForro = `(${larguraBK.toFixed(2)}m larg. BK) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
+      } else {
+        // Forro comum usa o fator (ou fator 1 se não tiver)
+        let fatorForro = forObj.fator || 1;
+        areaForro = (largNum * fatorForro) * consumoAltura;
+        eqForro = `(${largNum}m × ${fatorForro}) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
+      }
+      
+      custoFor = areaForro * forObj.preco;
+      detalhes.push({ tipo: 'Forro', icon: <Palette size={20} className="text-purple-500" />, nome: forObj.nome, equacao: eqForro, valor: custoFor });
     }
 
-    // 3. Cálculo Confecção
+    // 3. Cálculo Confecção (Mantido por metro linear de janela)
     let baseCustoCst = (tecObj.id !== 'nenhum' && forObj.id !== 'nenhum') ? cstObj.cort_forro : (tecObj.id !== 'nenhum' ? cstObj.so_cort : cstObj.so_forro);
     let custoCst = baseCustoCst * largNum;
     detalhes.push({ tipo: 'Confecção', icon: <Scissors size={20} className="text-orange-500" />, nome: cstObj.nome, equacao: `${largNum}m × ${formatBRL(baseCustoCst)}/m`, valor: custoCst });
 
-    // 4. Cálculo Ferragem
+    // 4. Cálculo Ferragem (Mantido por metro linear de janela)
     let custoFer = servicoId !== 'nenhum' ? (largNum * ferragemPreco) : 0;
     if (custoFer > 0) {
       detalhes.push({ tipo: 'Ferragem', icon: <Wrench size={20} className="text-gray-500" />, nome: "Suporte/Trilho", equacao: `${largNum}m × ${formatBRL(ferragemPreco)}/m`, valor: custoFer });
@@ -150,12 +173,11 @@ export default function Orcamentos() {
 
     // Objeto do Item Finalizado
     const newItem = {
-      id: editingCartItemId || Date.now(), // Mantém o ID se estiver editando
+      id: editingCartItemId || Date.now(),
       nome: nomeAmbiente, largura: largNum, altura: altNum, servico: servicoId,
       desc: `${modObj.nome} | ${tecObj.nome} | ${forObj.nome}`,
       mat_cost: custoTec + custoFor + custoCst + custoFer,
       detalhes_array: detalhes,
-      // Salva os IDs para podermos editar depois
       tecidoId: tecObj.id,
       forroId: forObj.id,
       modeloId: modObj.id,
@@ -163,27 +185,23 @@ export default function Orcamentos() {
     };
 
     if (editingCartItemId) {
-      // Substitui o item antigo pelo novo corrigido
       setCart(cart.map(i => i.id === editingCartItemId ? newItem : i));
-      setEditingCartItemId(null); // Sai do modo de edição
+      setEditingCartItemId(null);
     } else {
-      // Adiciona um item novo na lista
       setCart([...cart, newItem]);
     }
     
-    // Limpa apenas os campos de texto para agilizar a próxima janela
     setNomeAmbiente(""); setLargura(""); setAltura("");
   };
 
   const delItem = (id: number) => setCart(cart.filter(i => i.id !== id));
 
-  // --- NOVA FUNÇÃO: PUXAR ITEM DO CARRINHO PRO FORMULÁRIO ---
+  // --- PUXAR ITEM DO CARRINHO PRO FORMULÁRIO ---
   const editCartItem = (item: any) => {
     setNomeAmbiente(item.nome);
     setLargura(item.largura.toString());
     setAltura(item.altura.toString());
     
-    // Puxa as seleções se elas existirem no objeto (itens antigos podem não ter)
     if (item.tecidoId) setTecidoId(item.tecidoId);
     if (item.forroId) setForroId(item.forroId);
     if (item.modeloId) setModeloId(item.modeloId);
@@ -279,7 +297,6 @@ export default function Orcamentos() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-6">
         <div className="space-y-6">
             
-            {/* AVISO VISUAL DE EDIÇÃO DE PEDIDO GLOBAL */}
             {editId && (
               <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex items-center justify-between shadow-sm">
                 <div>
@@ -324,10 +341,10 @@ export default function Orcamentos() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {dbTecidos.map(t => <option key={t.id} value={t.id}>{t.nome} (R$ {t.preco}/m)</option>)}
+                    {dbTecidos.map(t => <option key={t.id} value={t.id}>{t.nome} (R$ {t.preco}/m²)</option>)}
                   </select>
                   <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {dbForros.map(f => <option key={f.id} value={f.id}>{f.nome} (R$ {f.preco}/m)</option>)}
+                    {dbForros.map(f => <option key={f.id} value={f.id}>{f.nome} (R$ {f.preco}/m²)</option>)}
                   </select>
                 </div>
 
@@ -361,7 +378,6 @@ export default function Orcamentos() {
                   <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
                   <p className="text-sm mt-1 text-gray-700">Materiais: <strong className="text-blue-600">{formatBRL(item.mat_cost)}</strong></p>
                   
-                  {/* BOTÕES DE AÇÃO: EDITAR E EXCLUIR */}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex gap-1">
                     <button type="button" onClick={() => editCartItem(item)} className="p-1 bg-white text-indigo-500 border border-indigo-200 rounded hover:bg-indigo-500 hover:text-white transition shadow-sm">
                       <PencilSimple size={16} weight="bold" />
