@@ -78,7 +78,7 @@ export default function Historico() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(26);
     doc.setTextColor(37, 99, 235);
-    doc.text("JEISEL CORTINAS", 14, 30);
+    doc.text("JC CORTINAS", 14, 30);
     
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);

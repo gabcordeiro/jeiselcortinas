@@ -63,7 +63,7 @@ export default function DashboardBI() {
     <div className="space-y-8 pb-10">
       <header className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h1 className="text-2xl font-black text-gray-800 tracking-tight">Inteligência de Vendas</h1>
-        <p className="text-gray-500 text-sm">Visão geral do desempenho da Jeisel Cortinas</p>
+        <p className="text-gray-500 text-sm">Visão geral do desempenho da JC Cortinas</p>
       </header>
 
       {/* Cards de KPI */}

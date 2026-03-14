@@ -111,7 +111,7 @@ export default function GerenciarUsuarios() {
         </div>
         <div>
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Controle de Acesso</h1>
-          <p className="text-gray-500 text-sm">Gerencie a equipe da Jeisel Cortinas.</p>
+          <p className="text-gray-500 text-sm">Gerencie a equipe da JC Cortinas.</p>
         </div>
       </header>
 
@@ -282,7 +282,7 @@ export default function GerenciarUsuarios() {
             </div>
             <h2 className="text-2xl font-black text-gray-800 tracking-tight">Revogar Acesso?</h2>
             <p className="text-sm font-medium text-gray-500">
-              O usuário perderá o acesso ao sistema da Jeisel Cortinas imediatamente.
+              O usuário perderá o acesso ao sistema da JC Cortinas imediatamente.
             </p>
             <div className="flex gap-3 pt-4">
               <button onClick={() => setIsUserDeleteModalOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-600 rounded-xl font-black hover:bg-gray-200 transition">Cancelar</button>

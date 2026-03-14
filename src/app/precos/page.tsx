@@ -96,7 +96,7 @@ export default function GestorPrecos() {
           </div>
           <div>
             <h1 className="text-2xl font-black text-gray-800 tracking-tight">Gestor de Preços</h1>
-            <p className="text-sm text-gray-400">Controle financeiro da Jeisel Cortinas</p>
+            <p className="text-sm text-gray-400">Controle financeiro da JC Cortinas</p>
           </div>
         </div>
         

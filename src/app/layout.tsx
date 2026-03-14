@@ -8,7 +8,7 @@ import Sidebar from "@/components/Sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Jeisel Cortinas - Sistema",
+  title: "JC Cortinas - Sistema",
   description: "Gestão inteligente de orçamentos e vendas.",
 };
 

@@ -88,7 +88,7 @@ export default function Login() {
 
       <div className="bg-white/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-white/50 w-full max-w-md z-10 animate-in zoom-in duration-500">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-blue-600 tracking-tight">Jeisel Cortinas</h1>
+          <h1 className="text-4xl font-black text-blue-600 tracking-tight">JC Cortinas</h1>
           <p className="text-gray-500 font-medium mt-2">Acesse o sistema de orçamentos</p>
         </div>
 

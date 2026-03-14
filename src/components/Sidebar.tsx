@@ -52,7 +52,7 @@ export default function Sidebar() {
       {/* Logo Area */}
       <div className={`px-6 py-10 overflow-hidden whitespace-nowrap ${isCollapsed ? "flex justify-center" : ""}`}>
         <h1 className="text-2xl font-black text-blue-500 tracking-tighter">
-          {isCollapsed ? "JC" : "JEISEL CORTINAS"}
+          {isCollapsed ? "JC" : "JC CORTINAS"}
         </h1>
       </div>
 
