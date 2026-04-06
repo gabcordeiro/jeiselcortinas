@@ -67,8 +67,7 @@ export default function Orcamentos() {
 
       if (taxes) {
         const taxObj = taxes.reduce((acc: any, t) => { acc[t.chave] = Number(t.valor); return acc; }, {});
-        setDbTaxas(prev => ({ ...prev, ...taxObj }));
-      }
+        setDbTaxas((prev: any) => ({ ...prev, ...taxObj }));      }
       setPricesLoaded(true);
     }
     loadPrices();
