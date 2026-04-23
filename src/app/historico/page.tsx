@@ -6,13 +6,14 @@ import { supabase } from "@/lib/supabase";
 import { 
   Trash, MagnifyingGlass, Eye, X, Ruler, MathOperations, 
   CheckCircle, Clock, Prohibit, FilePdf, 
-  CaretDown, Warning, FileXls, PencilSimple 
+  CaretDown, Warning, FileXls, PencilSimple, User, Wrench
 } from "@phosphor-icons/react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx"; 
 
 export default function Historico() {
+  
   const router = useRouter();
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -23,6 +24,10 @@ export default function Historico() {
   const [selectedPedido, setSelectedPedido] = useState<any>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [idToDelete, setIdToDelete] = useState<number | null>(null);
+  
+  // NOVO: Estado para o Modal de Escolha de PDF
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [pedidoParaPdf, setPedidoParaPdf] = useState<any>(null);
 
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({
     key: 'created_at',
@@ -66,10 +71,148 @@ export default function Historico() {
     XLSX.writeFile(wb, nomeArquivo);
   };
 
-  const formatBRL = (v: number) => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+const formatBRL = (v: number) => 
+  new Intl.NumberFormat('pt-BR', { 
+    style: 'currency', 
+    currency: 'BRL' 
+  }).format(Number(v));
 
-  // --- FUNÇÃO DE PDF PREMIUM PARA WHATSAPP ---
-  const emitirPDF = (p: any) => {
+// =========================================================================
+  // NOVA FUNÇÃO: GERAR PDF DO CLIENTE (Design Fiel ao Documento Scheila)
+  // =========================================================================
+// =========================================================================
+  // NOVA FUNÇÃO: GERAR PDF DO CLIENTE (Design Fiel e Traço Engrossado)
+  // =========================================================================
+  const gerarPdfCliente = async (p: any) => {
+    const doc = new jsPDF();
+    
+    // 1. CARREGAR A FONTE MONTSERRAT
+    try {
+      const loadFont = async (path: string, name: string, weight: string) => {
+        const res = await fetch(path);
+        const buffer = await res.arrayBuffer();
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        doc.addFileToVFS(path, btoa(binary));
+        doc.addFont(path, name, weight);
+      };
+
+      await loadFont('/Montserrat-Regular.ttf', 'Montserrat', 'normal');
+      await loadFont('/Montserrat-Bold.ttf', 'Montserrat', 'bold');
+      doc.setFont('Montserrat');
+    } catch (error) {
+      console.warn("Fontes não encontradas. Usando helvetica.");
+      doc.setFont('helvetica');
+    }
+
+    // Configurações Globais de Cor (Preto Absoluto)
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
+
+    // 2. IMAGEM DO HEADER (Ajustada para cobrir o topo)
+    try {
+      doc.addImage('/logo.jpg', 'JPEG', 0, 0, 210, 42); 
+    } catch (e) {
+      console.error("Logo não encontrada.");
+    }
+
+    // 3. TÍTULO "Orçamento" (BEM NEGRITO E MAIOR)
+    doc.setFontSize(18); // Aumentado de 14 para 18
+    doc.setFont("Montserrat", "bold");
+    doc.setLineWidth(0.15); // Engrossa o traço do título
+    doc.text("Orçamento", 105, 58, { align: "center", renderingMode: 'fillAndStroke' });
+
+    // 4. CORPO DO DOCUMENTO (Ambientes)
+    let y = 75;
+    doc.setFontSize(12); // Aumentado de 11 para 12
+    
+    p.itens?.forEach((item: any) => {
+      if (y > 230) { doc.addPage(); y = 25; }
+
+      // Nome do Ambiente (Negrito com Stroke)
+      doc.setFont("Montserrat", "bold");
+      doc.setLineWidth(0.08); // Engrossa levemente o nome do ambiente
+      const ambienteTexto = `${item.nome}:`;
+      doc.text(ambienteTexto, 14, y, { renderingMode: 'fillAndStroke' });
+      
+      // Linha sublinhada mais grossa
+      doc.setLineWidth(0.3);
+      doc.line(14, y + 1.5, 14 + doc.getTextWidth(ambienteTexto), y + 1.5); 
+      y += 10;
+      
+      // Descrição Técnica (Texto Normal mas bem preto)
+      doc.setFont("Montserrat", "normal");
+      doc.setLineWidth(0); // Reset stroke para texto comum não ficar ilegível
+      const arrDesc = item.desc.split(' | '); 
+      const modelo = arrDesc[0] || '';
+      const tecido = arrDesc[1] || 'Sem tecido';
+      const forro = arrDesc[2] || 'Sem forro';
+      const ferragemName = item.detalhes_array?.find((d: any) => d.tipo === 'Ferragem')?.nome || 'Sem trilho extra';
+
+      const textoCortina = `- Cortina modelo ${modelo.toLowerCase()}, tecido ${tecido.toLowerCase()}, cor branco, forro em ${forro.toLowerCase()}, instalação teto, ${ferragemName.toLowerCase()}.\nMedidas: ${item.largura.toFixed(2).replace('.',',')}x${item.altura.toFixed(2).replace('.',',')}m.`;
+      
+      const splitTexto = doc.splitTextToSize(textoCortina, 180);
+      doc.text(splitTexto, 14, y);
+      y += (splitTexto.length * 7) + 12; 
+    });
+
+    // 5. INFORMAÇÕES DE PAGAMENTO (NEGRITO E MAIOR)
+    if (y > 200) { doc.addPage(); y = 30; }
+    
+    doc.setFontSize(13); // Aumentado para destaque
+    doc.setFont("Montserrat", "bold");
+    doc.setLineWidth(0.12);
+    doc.text(`VALOR: ${formatBRL(p.total)}`, 14, y, { renderingMode: 'fillAndStroke' });
+
+    y += 18;
+    
+    doc.setFontSize(11);
+    // Função auxiliar atualizada para suportar negrito forte
+    const infoComSublinhado = (titulo: string, texto: string, posY: number) => {
+      doc.setFont("Montserrat", "bold");
+      doc.setLineWidth(0.1);
+      doc.text(titulo, 14, posY, { renderingMode: 'fillAndStroke' });
+      
+      const w = doc.getTextWidth(titulo);
+      doc.setLineWidth(0.3);
+      doc.line(14, posY + 1.5, 14 + w, posY + 1.5);
+      
+      doc.setFont("Montserrat", "normal");
+      doc.setLineWidth(0);
+      const textoSplit = doc.splitTextToSize(` ${texto}`, 180 - w);
+      doc.text(textoSplit, 14 + w, posY);
+      return textoSplit.length * 7;
+    };
+
+    y += infoComSublinhado("FORMAS DE PAGAMENTO:", "a prazo em até 10x sem juros ou à vista (30% de entrada e restante até o dia da instalação).", y) + 8;
+    y += infoComSublinhado("PRAZO DE ENTREGA:", "10 dias úteis.", y) + 8;
+    y += infoComSublinhado("CHAVE PIX:", "293956360001-61 Jeisel Almeida Rodrigues de Melo", y);
+
+    // 6. OBSERVAÇÕES
+    y += 18;
+    doc.setFont("Montserrat", "normal");
+    doc.text("*Observação: não trabalhamos aos sábados. Instalações", 14, y);
+    doc.text("aos sábados têm acréscimo de R$ 100,00.", 14, y + 6);
+
+    // 7. RODAPÉ FIXO
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    doc.text("WhatsApp: (27) 99316-3890 | Instagram: @cortinas.jc", 105, 275, { align: "center" });
+    doc.text("Endereço: Rua Felicidade Siqueira, 198 - A Jardim Marilândia - Vila Velha - ES", 105, 281, { align: "center" });
+    
+    doc.setFillColor(220, 224, 212);
+    doc.rect(0, 286, 210, 11, 'F');
+
+    doc.save(`JC_Cortinas_Orcamento_${p.cliente.replace(/\s+/g, '_')}.pdf`);
+    setIsPdfModalOpen(false);
+  };
+  // =========================================================================
+  // FUNÇÃO ORIGINAL: GERAR PDF INTERNO (Com Tabela de Cálculos e Matemática)
+  // =========================================================================
+  const gerarPdfInterno = (p: any) => {
     const doc = new jsPDF();
     
     doc.setFillColor(37, 99, 235);
@@ -83,7 +226,7 @@ export default function Historico() {
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.setFont("helvetica", "normal");
-    doc.text("Orçamento Exclusivo sob Medida", 14, 36);
+    doc.text("Orçamento Interno Analítico", 14, 36);
     
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
@@ -166,13 +309,8 @@ export default function Historico() {
     doc.setTextColor(5, 150, 105);
     doc.text(formatBRL(p.total), 190, finalY + 5, { align: "right" });
 
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.setFont("helvetica", "italic");
-    doc.text("Orçamento válido por 10 dias. Valores sujeitos a alteração após o prazo.", 105, 280, { align: "center" });
-    doc.text("Agradecemos a preferência!", 105, 285, { align: "center" });
-
-    doc.save(`Orcamento_Jeisel_${p.id}_${p.cliente.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`Interno_Jeisel_${p.id}_${p.cliente.replace(/\s+/g, '_')}.pdf`);
+    setIsPdfModalOpen(false); // Fecha o modal após gerar
   };
 
   async function updateStatus(id: number, newStatus: string) {
@@ -189,9 +327,7 @@ export default function Historico() {
 
   // --- NOVA FUNÇÃO: CARREGAR PARA EDIÇÃO ---
   const carregarParaEdicao = (pedido: any) => {
-    // Salva o pedido na memória do navegador para a página principal ler
     localStorage.setItem('jeisel_edit_pedido', JSON.stringify(pedido));
-    // Redireciona para a tela inicial (Calculadora)
     router.push('/');
   };
 
@@ -251,8 +387,9 @@ export default function Historico() {
         <SortButton label="Vendedor" active={sortConfig.key === 'vendedor'} onClick={() => handleSort('vendedor')} />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <table className="w-full text-left">
+      {/* ADICIONADO: overflow-x-auto para responsividade no celular */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+        <table className="w-full text-left min-w-[700px]">
           <thead className="bg-gray-50/50 text-xs uppercase text-gray-400 font-black">
             <tr>
               <th className="p-5">Cód</th>
@@ -275,14 +412,15 @@ export default function Historico() {
                 <td className="p-5 font-black text-emerald-600">{formatBRL(p.total)}</td>
                 <td className="p-5">
                   <div className="flex justify-center gap-2">
-                    <button onClick={() => setSelectedPedido(p)} className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Eye size={18} /></button>
-                    <button onClick={() => emitirPDF(p)} className="p-2 text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-600 hover:text-white transition-all"><FilePdf size={18} /></button>
+                    <button onClick={() => setSelectedPedido(p)} title="Ver Detalhes" className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Eye size={18} /></button>
                     
-                    {/* BOTÃO DE EDITAR AGORA CHAMA A FUNÇÃO DE CARREGAR */}
-                    <button onClick={() => carregarParaEdicao(p)} className="p-2 text-indigo-500 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"><PencilSimple size={18} /></button>
+                    {/* BOTÃO DE PDF AGORA ABRE O MODAL */}
+                    <button onClick={() => { setPedidoParaPdf(p); setIsPdfModalOpen(true); }} title="Gerar PDF" className="p-2 text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-600 hover:text-white transition-all"><FilePdf size={18} /></button>
+                    
+                    <button onClick={() => carregarParaEdicao(p)} title="Editar Pedido" className="p-2 text-indigo-500 bg-indigo-50 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"><PencilSimple size={18} /></button>
                     
                     {role === "ADMIN" && (
-                      <button onClick={() => { setIdToDelete(p.id); setIsDeleteModalOpen(true); }} className="p-2 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all"><Trash size={18} /></button>
+                      <button onClick={() => { setIdToDelete(p.id); setIsDeleteModalOpen(true); }} title="Excluir" className="p-2 text-red-400 bg-red-50 hover:bg-red-500 hover:text-white rounded-lg transition-all"><Trash size={18} /></button>
                     )}
                   </div>
                 </td>
@@ -291,6 +429,45 @@ export default function Historico() {
           </tbody>
         </table>
       </div>
+
+      {/* NOVO MODAL: ESCOLHA DE PDF (Design Premium) */}
+      {isPdfModalOpen && pedidoParaPdf && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[70] p-4">
+          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-lg w-full relative animate-in zoom-in duration-200">
+            <button onClick={() => setIsPdfModalOpen(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 bg-gray-50 rounded-full transition-colors"><X size={20} weight="bold" /></button>
+            
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <FilePdf size={32} weight="duotone" />
+              </div>
+              <h2 className="text-2xl font-black text-gray-800">Gerar Orçamento</h2>
+              <p className="text-gray-500 text-sm mt-1">Qual formato de PDF você deseja baixar?</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Opção 1: Cliente */}
+              <button 
+                onClick={() => gerarPdfCliente(pedidoParaPdf)}
+                className="flex flex-col items-center justify-center p-6 border-2 border-indigo-100 bg-indigo-50/30 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all group"
+              >
+                <User size={32} className="text-indigo-500 mb-3 group-hover:scale-110 transition-transform" weight="duotone" />
+                <span className="font-bold text-gray-800 text-lg">Via do Cliente</span>
+                <span className="text-xs text-gray-500 mt-2 text-center">Modelo limpo com PIX para o cliente</span>
+              </button>
+
+              {/* Opção 2: Interno/Orçador */}
+              <button 
+                onClick={() => gerarPdfInterno(pedidoParaPdf)}
+                className="flex flex-col items-center justify-center p-6 border-2 border-amber-100 bg-amber-50/30 rounded-xl hover:border-amber-500 hover:bg-amber-50 transition-all group"
+              >
+                <Wrench size={32} className="text-amber-500 mb-3 group-hover:scale-110 transition-transform" weight="duotone" />
+                <span className="font-bold text-gray-800 text-lg">Via do Orçador</span>
+                <span className="text-xs text-gray-500 mt-2 text-center">Tabela completa com memória de cálculo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DETALHES */}
       {selectedPedido && (
@@ -325,13 +502,14 @@ export default function Historico() {
 
       {/* MODAL DELETAR */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[60]">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto"><Warning size={32} /></div>
-            <h2 className="text-xl font-bold">Excluir Registro?</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[60] p-4">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-4 animate-in zoom-in duration-200">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><Warning size={32} weight="duotone" /></div>
+            <h2 className="text-xl font-bold text-gray-800">Excluir Registro?</h2>
+            <p className="text-sm text-gray-500">Essa ação não pode ser desfeita.</p>
             <div className="flex gap-3 pt-4">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold">Não</button>
-              <button onClick={executeDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Sim, Excluir</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 transition-colors text-gray-600 rounded-xl font-bold">Cancelar</button>
+              <button onClick={executeDelete} className="flex-1 py-3 bg-red-600 hover:bg-red-700 transition-colors text-white rounded-xl font-bold shadow-lg shadow-red-200">Sim, Excluir</button>
             </div>
           </div>
         </div>
@@ -342,17 +520,17 @@ export default function Historico() {
 
 function SortButton({ label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all border ${active ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-gray-50 text-gray-500 border-gray-200"}`}>
+    <button onClick={onClick} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all border ${active ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"}`}>
       {label}
     </button>
   );
 }
 
 function StatusDropdown({ status, onUpdate }: { status: string, onUpdate: (val: string) => void }) {
-  const configs: any = { andamento: "bg-blue-100 text-blue-700", finalizado: "bg-emerald-100 text-emerald-700", cancelado: "bg-red-100 text-red-700" };
+  const configs: any = { andamento: "bg-blue-100 text-blue-700 border-blue-200", finalizado: "bg-emerald-100 text-emerald-700 border-emerald-200", cancelado: "bg-red-100 text-red-700 border-red-200" };
   return (
     <div className="relative">
-      <select value={status} onChange={(e) => onUpdate(e.target.value)} className={`appearance-none pl-3 pr-8 py-1.5 rounded-full border text-[10px] font-black uppercase outline-none ${configs[status]}`}>
+      <select value={status} onChange={(e) => onUpdate(e.target.value)} className={`appearance-none pl-3 pr-8 py-1.5 rounded-full border text-[10px] font-black uppercase outline-none cursor-pointer transition-colors ${configs[status]}`}>
         <option value="andamento">Aberto</option>
         <option value="finalizado">Finalizado</option>
         <option value="cancelado">Cancelado</option>

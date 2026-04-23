@@ -49,11 +49,21 @@ export default function Sidebar() {
         {isCollapsed ? <CaretRight size={14} weight="bold" /> : <CaretLeft size={14} weight="bold" />}
       </button>
 
-      {/* Logo Area */}
-      <div className={`px-6 py-10 overflow-hidden whitespace-nowrap ${isCollapsed ? "flex justify-center" : ""}`}>
-        <h1 className="text-2xl font-black text-blue-500 tracking-tighter">
-          {isCollapsed ? "JC" : "JC CORTINAS"}
-        </h1>
+{/* Logo Area com Imagens */}
+      <div className={`px-4 py-8 flex items-center transition-all duration-300 ${isCollapsed ? "justify-center" : "justify-start px-6"}`}>
+        {isCollapsed ? (
+          <img 
+            src="/icon.png" // Nome da sua imagem para quando estiver fechado
+            alt="JC Icon"
+            className="w-10 h-10 object-contain animate-in fade-in zoom-in duration-500"
+          />
+        ) : (
+          <img 
+            src="/banner.png" // Nome da sua imagem para quando estiver aberto
+            alt="JC Cortinas"
+            className="h-12 w-auto object-contain animate-in fade-in slide-in-from-left-5 duration-500"
+          />
+        )}
       </div>
 
       {/* Menu Principal */}

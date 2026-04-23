@@ -4,20 +4,24 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
   CurrencyDollar, 
-  Tag, 
-  ArrowsDownUp, 
   FloppyDiskBack, 
   Plus, 
   Trash,
   X,
   Palette,
-  Warning
+  Warning,
+  Wrench,
+  Ruler,
+  Info
 } from "@phosphor-icons/react";
 
 export default function GestorPrecos() {
   const [materiais, setMateriais] = useState<any[]>([]);
   const [taxas, setTaxas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Controle de Abas
+  const [activeTab, setActiveTab] = useState('tecidos'); // 'tecidos', 'ferragens', 'servicos', 'taxas'
 
   // Estados para o Modal de Cadastro
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -42,15 +46,13 @@ export default function GestorPrecos() {
     setLoading(false);
   }
 
-  // --- FUNÇÕES DE AÇÃO ---
-
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const { error } = await supabase.from('materiais').insert([
       { 
         nome: novoNome, 
         categoria: novaCategoria, 
-        preco: novaCategoria === 'modelo' ? 0 : Number(novoPreco), // Modelos não têm preço, só fator
+        preco: (novaCategoria === 'modelo' || novaCategoria === 'ferragem_fator') ? 0 : Number(novoPreco),
         fator: Number(novoFator) 
       }
     ]);
@@ -65,13 +67,8 @@ export default function GestorPrecos() {
     }
   };
 
-  const updatePrecoMaterial = async (id: string, novoValor: number) => {
-    await supabase.from('materiais').update({ preco: novoValor }).eq('id', id);
-  };
-
-  // NOVA FUNÇÃO: Atualiza o Fator do Modelo
-  const updateFatorMaterial = async (id: string, novoFator: number) => {
-    await supabase.from('materiais').update({ fator: novoFator }).eq('id', id);
+  const updateCampoMaterial = async (id: string, campo: string, novoValor: number) => {
+    await supabase.from('materiais').update({ [campo]: novoValor }).eq('id', id);
   };
 
   const updateTaxaGlobal = async (chave: string, novoValor: number) => {
@@ -85,126 +82,145 @@ export default function GestorPrecos() {
     setIsDeleteModalOpen(false);
   };
 
+  // Filtros por aba
+  const filterByTab = (cat: string) => {
+    if (activeTab === 'tecidos') return ['tecido', 'forro'].includes(cat);
+    if (activeTab === 'ferragens') return ['modelo', 'ferragem'].includes(cat);
+    if (activeTab === 'servicos') return ['servico_fixo', 'servico_metro'].includes(cat);
+    return false;
+  };
+
   if (loading) return <div className="p-10 text-center text-gray-400">Sincronizando tabelas...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-10 pb-20">
-      <header className="flex justify-between items-center bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+      <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-emerald-600 text-white rounded-xl shadow-lg">
-            <CurrencyDollar size={32} />
+            <CurrencyDollar size={32} weight="duotone" />
           </div>
           <div>
             <h1 className="text-2xl font-black text-gray-800 tracking-tight">Gestor de Preços</h1>
-            <p className="text-sm text-gray-400">Controle financeiro da JC Cortinas</p>
+            <p className="text-sm text-gray-500">Controle o catálogo e os valores da JC Cortinas</p>
           </div>
         </div>
         
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200"
+          className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-200 w-full md:w-auto justify-center"
         >
-          <Plus size={20} weight="bold" /> Adicionar Material
+          <Plus size={20} weight="bold" /> Novo Item
         </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8 items-start">
-        
-        {/* Materiais e Modelos */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50/50 text-[10px] uppercase font-black text-gray-400 tracking-widest">
-              <tr>
-                <th className="p-5">Nome</th>
-                <th className="p-5">Categoria</th>
-                <th className="p-5">Valor / Fator</th>
-                <th className="p-5 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {materiais.map(m => (
-                <tr key={m.id} className="hover:bg-blue-50/10 transition-colors">
-                  <td className="p-5 font-bold text-gray-700">{m.nome}</td>
-                  <td className="p-5">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase 
-                      ${m.categoria === 'tecido' ? 'bg-blue-100 text-blue-700' : 
-                        m.categoria === 'forro' ? 'bg-purple-100 text-purple-700' : 
-                        'bg-amber-100 text-amber-700'}`}>
-                      {m.categoria}
+      {/* Navegação de Abas */}
+      <div className="flex overflow-x-auto gap-2 p-1 bg-gray-100 rounded-xl">
+        <TabButton active={activeTab === 'tecidos'} onClick={() => setActiveTab('tecidos')} icon={<Palette/>} label="Tecidos e Forros" />
+        <TabButton active={activeTab === 'ferragens'} onClick={() => setActiveTab('ferragens')} icon={<Ruler/>} label="Modelos e Ferragens" />
+        <TabButton active={activeTab === 'servicos'} onClick={() => setActiveTab('servicos')} icon={<Wrench/>} label="Serviços Dinâmicos" />
+        <TabButton active={activeTab === 'taxas'} onClick={() => setActiveTab('taxas')} icon={<Info/>} label="Taxas Globais" />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[400px]">
+        {/* Renderização condicional das Abas */}
+        {activeTab !== 'taxas' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+{materiais.filter(m => filterByTab(m.categoria)).map(m => {
+              // LISTA DE PROTEÇÃO: Esses nomes exatos perdem a lixeira
+              const isProtegido = [
+                'Taxa de retirada de cortina antiga',
+                'Taxa fixa para pendurar em pedido misto',
+                'Instalação Padrão',
+                'Instalação Pé Direito Alto',
+                'Pendurar (Acima do mínimo)'
+              ].includes(m.nome);
+
+              return (
+                <div key={m.id} className="relative p-5 border border-gray-100 rounded-2xl hover:border-blue-200 hover:shadow-md transition-all group bg-gray-50/50">
+                  
+                  {/* SÓ MOSTRA A LIXEIRA SE NÃO FOR PROTEGIDO */}
+                  {!isProtegido && (
+                    <button 
+                      onClick={() => { setIdToDelete(m.id); setIsDeleteModalOpen(true); }}
+                      className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all bg-white p-1.5 rounded-md shadow-sm"
+                      title="Excluir item"
+                    >
+                      <Trash size={16} />
+                    </button>
+                  )}
+
+                  <div className="mb-4 pr-8">
+                    <h3 className="font-bold text-gray-800 text-lg truncate" title={m.nome}>{m.nome}</h3>
+                    <span className="text-[10px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block">
+                      {m.categoria.replace('_', ' ')}
                     </span>
-                  </td>
-                  <td className="p-5">
-                    {/* Se for modelo, edita o Fator. Se for tecido/forro, edita o Preço. */}
-                    {m.categoria === 'modelo' ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 font-bold uppercase">Fator:</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Se NÃO for Modelo, exibe preço */}
+                    {m.categoria !== 'modelo' && (
+                      <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                        <span className="text-xs font-bold text-gray-400">VALOR (R$)</span>
                         <input 
-                          type="number" 
-                          step="0.1"
-                          defaultValue={m.fator} 
-                          onBlur={(e) => updateFatorMaterial(m.id, Number(e.target.value))}
-                          className="w-20 p-2 bg-gray-50 border border-gray-100 rounded-lg focus:border-amber-500 focus:bg-white outline-none font-bold text-sm transition-all"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 font-bold uppercase">R$</span>
-                        <input 
-                          type="number" 
-                          defaultValue={m.preco} 
-                          onBlur={(e) => updatePrecoMaterial(m.id, Number(e.target.value))}
-                          className="w-24 p-2 bg-gray-50 border border-gray-100 rounded-lg focus:border-emerald-500 focus:bg-white outline-none font-bold text-sm transition-all"
+                          type="number" step="0.01" defaultValue={m.preco} 
+                          onBlur={(e) => updateCampoMaterial(m.id, 'preco', Number(e.target.value))}
+                          className="w-24 text-right bg-transparent font-bold text-gray-800 outline-none focus:text-blue-600"
                         />
                       </div>
                     )}
-                  </td>
-                  <td className="p-5 text-center">
-                    <button 
-                      onClick={() => { setIdToDelete(m.id); setIsDeleteModalOpen(true); }}
-                      className="text-red-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash size={20} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
 
-        {/* Taxas Globais */}
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-            <h2 className="font-black text-gray-800 flex items-center gap-2 text-sm uppercase tracking-wider"><ArrowsDownUp /> Taxas de Serviço</h2>
-            <div className="space-y-5">
-              {taxas.map(t => (
-                <div key={t.chave} className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">{t.descricao}</label>
+                    {/* Se NÃO for Serviço Fixo nem Forro puro, exibe Fator */}
+                    {!['servico_fixo', 'forro', 'ferragem', 'servico_metro'].includes(m.categoria) && (
+                      <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                        <span className="text-xs font-bold text-gray-400">FATOR MULT.</span>
+                        <input 
+                          type="number" step="0.1" defaultValue={m.fator} 
+                          onBlur={(e) => updateCampoMaterial(m.id, 'fator', Number(e.target.value))}
+                          className="w-20 text-right bg-transparent font-bold text-gray-800 outline-none focus:text-blue-600"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {materiais.filter(m => filterByTab(m.categoria)).length === 0 && (
+              <div className="col-span-full py-20 text-center text-gray-400 font-medium">
+                Nenhum item cadastrado nesta categoria.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="max-w-2xl mx-auto space-y-4">
+             {taxas.map(t => (
+                <div key={t.chave} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50">
+                  <label className="text-sm font-bold text-gray-700">{t.descricao}</label>
                   <div className="flex gap-2">
                     <input 
                       type="number" 
                       defaultValue={t.valor}
                       id={`taxa-${t.chave}`}
-                      className="flex-1 p-2.5 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-blue-600 font-bold text-gray-700"
+                      className="w-32 p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-600 font-bold text-gray-800 text-right"
                     />
                     <button 
                       onClick={() => {
                         const val = (document.getElementById(`taxa-${t.chave}`) as HTMLInputElement).value;
                         updateTaxaGlobal(t.chave, Number(val));
                       }}
-                      className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                      className="p-2.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"
+                      title="Salvar"
                     >
                       <FloppyDiskBack size={20} weight="bold" />
                     </button>
                   </div>
                 </div>
               ))}
-            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* --- MODAL DE CADASTRO --- */}
+      {/* --- MODAIS CONTINUAM OS MESMOS, SÓ ATUALIZEI AS OPÇÕES DO SELECT --- */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
@@ -238,12 +254,15 @@ export default function GestorPrecos() {
                     <option value="tecido">Tecido</option>
                     <option value="forro">Forro</option>
                     <option value="modelo">Modelo de Prega</option>
+                    <option value="ferragem">Ferragem</option>
+                    {/* NOVAS OPÇÕES DE SERVIÇO AQUI */}
+                    <option value="servico_fixo">Serviço (Fixo)</option>
+                    <option value="servico_metro">Serviço (por Metro)</option>
                   </select>
                 </div>
                 
-                {/* Se for Modelo, esconde o campo de Preço, pois Modelos só usam Fator */}
                 <div className={`space-y-1.5 ${novaCategoria === 'modelo' ? 'opacity-30 pointer-events-none' : ''}`}>
-                  <label className="text-[10px] font-black text-gray-400 uppercase">Preço (R$/m)</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Preço (R$)</label>
                   <input 
                     type="number" 
                     value={novoPreco} 
@@ -256,7 +275,7 @@ export default function GestorPrecos() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-gray-400 uppercase">Fator de Consumo Padrão</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase">Fator (Deixe 1 se não usar)</label>
                 <input 
                   type="number" 
                   step="0.1"
@@ -292,5 +311,19 @@ export default function GestorPrecos() {
         </div>
       )}
     </div>
+  );
+}
+
+// Subcomponente de Aba
+function TabButton({ active, onClick, icon, label }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-5 py-3 rounded-lg font-bold text-sm transition-all whitespace-nowrap flex-1 justify-center ${
+        active ? 'bg-white text-blue-600 shadow-sm border border-gray-200/50' : 'text-gray-500 hover:bg-gray-200/50'
+      }`}
+    >
+      {icon} {label}
+    </button>
   );
 }

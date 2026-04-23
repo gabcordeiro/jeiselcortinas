@@ -1,8 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { SignIn, Lock, Envelope, CheckCircle, Warning } from "@phosphor-icons/react";
+
+// --- COMPONENTE PARA LER O ERRO DA URL ---
+function MensagemErroSessao() {
+  const searchParams = useSearchParams();
+  const erroSessao = searchParams.get('erro');
+
+  if (erroSessao === 'sessao_expirada') {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-600 p-3.5 rounded-xl mb-6 text-sm text-center font-medium animate-in fade-in zoom-in duration-300 shadow-sm">
+        Sua sessão expirou ou você não possui acesso. Por favor, faça o login novamente.
+      </div>
+    );
+  }
+  return null;
+}
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -45,7 +61,7 @@ export default function Login() {
     }
   };
 
-  // --- NOVA FUNÇÃO: RECUPERAR SENHA ---
+  // --- FUNÇÃO: RECUPERAR SENHA ---
   const handleResetPassword = async () => {
     if (!email) {
       setFeedback({ 
@@ -87,10 +103,25 @@ export default function Login() {
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="bg-white/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-white/50 w-full max-w-md z-10 animate-in zoom-in duration-500">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-blue-600 tracking-tight">JC Cortinas</h1>
-          <p className="text-gray-500 font-medium mt-2">Acesse o sistema de orçamentos</p>
+<div className="text-center mb-8 flex flex-col items-center">
+          {/* Efeito de Borda Gradiente com Transparência */}
+          <div className="relative p-[3px] rounded-2xl max-w-[280px] mx-auto mb-3 hover:scale-105 transition-transform duration-300">
+            {/* Fundo interno da imagem (branco levemente transparente) */}
+            <div className="p-0 flex items-center justify-center">
+              <img 
+                src="/bannerWhite.png" 
+                alt="JC Cortinas Logo" 
+                className="w-full h-auto object-contain rounded-lg "
+              />
+            </div>
+          </div>
+          <p className="text-gray-500 font-medium mt-1 text-sm">Sistema de orçamentos</p>
         </div>
+
+        {/* COMPONENTE QUE MOSTRA O AVISO DE SESSÃO EXPIRADA (Envolvido no Suspense pro Vercel não chiar) */}
+        <Suspense fallback={null}>
+          <MensagemErroSessao />
+        </Suspense>
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="flex flex-col gap-1.5">
@@ -119,7 +150,6 @@ export default function Login() {
               className="p-3.5 bg-gray-50/50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white transition-all font-bold text-gray-800"
               placeholder="••••••••"
             />
-            {/* O BOTÃO QUE VOCÊ PEDIU */}
             <div className="flex justify-end">
               <button 
                 type="button" 

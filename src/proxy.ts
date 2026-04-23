@@ -29,11 +29,18 @@ export async function proxy(request: NextRequest) {
 
   const isLoginPage = request.nextUrl.pathname.startsWith('/login')
 
-  // LÓGICA DE BLOQUEIO
+// LÓGICA DE BLOQUEIO
   if (!user && !isLoginPage) {
-    console.log("❌ Bloqueado pelo Proxy: Sem sessão ativa.")
+    // 1. Melhoramos o seu log no terminal para mostrar a rota exata
+    console.log(`❌ Acesso negado: Tentativa de acessar [${request.nextUrl.pathname}] sem sessão.`);
+    
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    
+    // 2. O Pulo do Gato: Adicionamos um parâmetro na URL para avisar o frontend
+    // Ex: o site vai redirecionar para /login?erro=sessao_expirada
+    url.searchParams.set('erro', 'sessao_expirada')
+    
     return NextResponse.redirect(url)
   }
 
@@ -49,5 +56,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Agora o middleware ignora arquivos com final .png, .jpg, .svg e .ttf (fontes)
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ttf)$).*)'],
 }
