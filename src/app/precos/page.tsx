@@ -12,7 +12,8 @@ import {
   Warning,
   Wrench,
   Ruler,
-  Info
+  Info,
+  CheckCircle
 } from "@phosphor-icons/react";
 
 export default function GestorPrecos() {
@@ -21,7 +22,7 @@ export default function GestorPrecos() {
   const [loading, setLoading] = useState(true);
   
   // Controle de Abas
-  const [activeTab, setActiveTab] = useState('tecidos'); // 'tecidos', 'ferragens', 'servicos', 'taxas'
+  const [activeTab, setActiveTab] = useState('tecidos');
 
   // Estados para o Modal de Cadastro
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -30,9 +31,10 @@ export default function GestorPrecos() {
   const [novoPreco, setNovoPreco] = useState("");
   const [novoFator, setNovoFator] = useState("3");
 
-  // Estados para o Modal de Confirmação de Exclusão
+  // Estados para Modais de Exclusão e Toast
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   useEffect(() => {
     fetchData();
@@ -46,13 +48,19 @@ export default function GestorPrecos() {
     setLoading(false);
   }
 
+  // FUNÇÃO QUE MOSTRA O AVISO NO CANTO DA TELA
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
+
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const { error } = await supabase.from('materiais').insert([
       { 
         nome: novoNome, 
         categoria: novaCategoria, 
-        preco: (novaCategoria === 'modelo' || novaCategoria === 'ferragem_fator') ? 0 : Number(novoPreco),
+        preco: Number(novoPreco),
         fator: Number(novoFator) 
       }
     ]);
@@ -62,27 +70,43 @@ export default function GestorPrecos() {
       setNovoNome("");
       setNovoPreco("");
       fetchData();
+      showToast('Item cadastrado com sucesso!');
     } else {
-      alert("Erro ao salvar: " + error.message);
+      showToast("Erro ao salvar: " + error.message, 'error');
     }
   };
 
+  // FUNÇÃO ATUALIZADA: AGORA COM AVISO DE FEEDBACK
   const updateCampoMaterial = async (id: string, campo: string, novoValor: number) => {
-    await supabase.from('materiais').update({ [campo]: novoValor }).eq('id', id);
+    const { error } = await supabase.from('materiais').update({ [campo]: novoValor }).eq('id', id);
+    if (!error) {
+      showToast('Valor atualizado e salvo!');
+    } else {
+      showToast('Erro ao atualizar banco de dados.', 'error');
+    }
   };
 
   const updateTaxaGlobal = async (chave: string, novoValor: number) => {
-    await supabase.from('configuracoes_globais').update({ valor: novoValor }).eq('chave', chave);
+    const { error } = await supabase.from('configuracoes_globais').update({ valor: novoValor }).eq('chave', chave);
+    if (!error) {
+      showToast('Taxa global atualizada!');
+    } else {
+      showToast('Erro ao atualizar taxa.', 'error');
+    }
   };
 
   const executeDelete = async () => {
     if (!idToDelete) return;
-    await supabase.from('materiais').delete().eq('id', idToDelete);
-    setMateriais(materiais.filter(m => m.id !== idToDelete));
+    const { error } = await supabase.from('materiais').delete().eq('id', idToDelete);
+    if (!error) {
+      setMateriais(materiais.filter(m => m.id !== idToDelete));
+      showToast('Item excluído com sucesso!');
+    } else {
+      showToast('Erro ao excluir item.', 'error');
+    }
     setIsDeleteModalOpen(false);
   };
 
-  // Filtros por aba
   const filterByTab = (cat: string) => {
     if (activeTab === 'tecidos') return ['tecido', 'forro'].includes(cat);
     if (activeTab === 'ferragens') return ['modelo', 'ferragem'].includes(cat);
@@ -90,10 +114,20 @@ export default function GestorPrecos() {
     return false;
   };
 
+  // MAPA DE CORES PARA AS CATEGORIAS
+  const coresCategoria: any = {
+    tecido: 'bg-blue-100 text-blue-700 border-blue-200',
+    forro: 'bg-purple-100 text-purple-700 border-purple-200',
+    modelo: 'bg-amber-100 text-amber-700 border-amber-200',
+    ferragem: 'bg-slate-100 text-slate-700 border-slate-200',
+    servico_fixo: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    servico_metro: 'bg-teal-100 text-teal-700 border-teal-200',
+  };
+
   if (loading) return <div className="p-10 text-center text-gray-400">Sincronizando tabelas...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 pb-20 relative">
       <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-emerald-600 text-white rounded-xl shadow-lg">
@@ -122,11 +156,10 @@ export default function GestorPrecos() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[400px]">
-        {/* Renderização condicional das Abas */}
         {activeTab !== 'taxas' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-{materiais.filter(m => filterByTab(m.categoria)).map(m => {
-              // LISTA DE PROTEÇÃO: Esses nomes exatos perdem a lixeira
+            {materiais.filter(m => filterByTab(m.categoria)).map(m => {
+              
               const isProtegido = [
                 'Taxa de retirada de cortina antiga',
                 'Taxa fixa para pendurar em pedido misto',
@@ -135,10 +168,12 @@ export default function GestorPrecos() {
                 'Pendurar (Acima do mínimo)'
               ].includes(m.nome);
 
+              // Pega a cor correspondente ou uma cor padrão se não achar
+              const corTag = coresCategoria[m.categoria] || 'bg-gray-100 text-gray-600 border-gray-200';
+
               return (
                 <div key={m.id} className="relative p-5 border border-gray-100 rounded-2xl hover:border-blue-200 hover:shadow-md transition-all group bg-gray-50/50">
                   
-                  {/* SÓ MOSTRA A LIXEIRA SE NÃO FOR PROTEGIDO */}
                   {!isProtegido && (
                     <button 
                       onClick={() => { setIdToDelete(m.id); setIsDeleteModalOpen(true); }}
@@ -151,26 +186,23 @@ export default function GestorPrecos() {
 
                   <div className="mb-4 pr-8">
                     <h3 className="font-bold text-gray-800 text-lg truncate" title={m.nome}>{m.nome}</h3>
-                    <span className="text-[10px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md mt-1 inline-block">
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md mt-1 inline-block border ${corTag}`}>
                       {m.categoria.replace('_', ' ')}
                     </span>
                   </div>
 
                   <div className="space-y-3">
-                    {/* Se NÃO for Modelo, exibe preço */}
-                    {m.categoria !== 'modelo' && (
-                      <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
-                        <span className="text-xs font-bold text-gray-400">VALOR (R$)</span>
-                        <input 
-                          type="number" step="0.01" defaultValue={m.preco} 
-                          onBlur={(e) => updateCampoMaterial(m.id, 'preco', Number(e.target.value))}
-                          className="w-24 text-right bg-transparent font-bold text-gray-800 outline-none focus:text-blue-600"
-                        />
-                      </div>
-                    )}
+                    <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
+                      <span className="text-xs font-bold text-gray-400">VALOR (R$)</span>
+                      <input 
+                        type="number" step="0.01" defaultValue={m.preco} 
+                        onBlur={(e) => updateCampoMaterial(m.id, 'preco', Number(e.target.value))}
+                        className="w-24 text-right bg-transparent font-bold text-gray-800 outline-none focus:text-blue-600"
+                      />
+                    </div>
 
-                    {/* Se NÃO for Serviço Fixo nem Forro puro, exibe Fator */}
-                    {!['servico_fixo', 'forro', 'ferragem', 'servico_metro'].includes(m.categoria) && (
+                    {/* FATOR MULT. liberado para forro */}
+                    {!['servico_fixo', 'ferragem', 'servico_metro'].includes(m.categoria) && (
                       <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100">
                         <span className="text-xs font-bold text-gray-400">FATOR MULT.</span>
                         <input 
@@ -220,7 +252,17 @@ export default function GestorPrecos() {
         )}
       </div>
 
-      {/* --- MODAIS CONTINUAM OS MESMOS, SÓ ATUALIZEI AS OPÇÕES DO SELECT --- */}
+      {/* COMPONENTE TOAST (Aviso de Sucesso/Erro flutuante) */}
+      {toast.show && (
+        <div className={`fixed bottom-6 right-6 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300 z-[100] border ${
+          toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle size={24} weight="fill" className="text-emerald-500" /> : <Warning size={24} weight="fill" className="text-red-500" />}
+          <span className="font-bold text-sm pr-4">{toast.message}</span>
+        </div>
+      )}
+
+      {/* --- MODAL DE CADASTRO --- */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex justify-center items-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
@@ -255,21 +297,20 @@ export default function GestorPrecos() {
                     <option value="forro">Forro</option>
                     <option value="modelo">Modelo de Prega</option>
                     <option value="ferragem">Ferragem</option>
-                    {/* NOVAS OPÇÕES DE SERVIÇO AQUI */}
                     <option value="servico_fixo">Serviço (Fixo)</option>
                     <option value="servico_metro">Serviço (por Metro)</option>
                   </select>
                 </div>
                 
-                <div className={`space-y-1.5 ${novaCategoria === 'modelo' ? 'opacity-30 pointer-events-none' : ''}`}>
-                  <label className="text-[10px] font-black text-gray-400 uppercase">Preço (R$)</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Preço / Conf. (R$)</label>
                   <input 
                     type="number" 
                     value={novoPreco} 
                     onChange={(e) => setNovoPreco(e.target.value)}
                     placeholder="0.00"
                     className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl outline-none focus:border-blue-600 font-bold"
-                    required={novaCategoria !== 'modelo'}
+                    required
                   />
                 </div>
               </div>
@@ -314,7 +355,6 @@ export default function GestorPrecos() {
   );
 }
 
-// Subcomponente de Aba
 function TabButton({ active, onClick, icon, label }: any) {
   return (
     <button

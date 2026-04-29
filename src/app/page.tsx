@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { Plus, MagnifyingGlass, Check, XCircle, X, MathOperations, Palette, Scissors, Wrench, Ruler, HardHat, PencilSimple } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import { DB } from "@/lib/data"; 
 
 // --- Funções Auxiliares de Cálculo ---
 function calcularConsumoBK(largura: number) {
@@ -28,24 +27,21 @@ export default function Orcamentos() {
 
   // Estados do Formulário e Carrinho
   const [cliente, setCliente] = useState("");
-  const [km, setKm] = useState(0);
+  const [km, setKm] = useState<number | "">("");
   const [cart, setCart] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Estado de Edição do Pedido Global (Vindo do Histórico)
+  // Estado de Edição
   const [editId, setEditId] = useState<number | null>(null);
-  
-  // Estado de Edição do Item do Carrinho
   const [editingCartItemId, setEditingCartItemId] = useState<number | null>(null);
 
   const [nomeAmbiente, setNomeAmbiente] = useState("");
   const [largura, setLargura] = useState("");
   const [altura, setAltura] = useState("");
   const [modeloId, setModeloId] = useState("");
-  const [costuraId, setCosturaId] = useState("padrao");
   const [tecidoId, setTecidoId] = useState("nenhum");
   const [forroId, setForroId] = useState("nenhum");
-  const [servicoId, setServicoId] = useState("padrao");
+  const [servicoId, setServicoId] = useState("padrao"); // Mantido para compatibilidade das taxas
   const [ferragemPreco, setFerragemPreco] = useState(0);
 
   // --- BUSCA PREÇOS NO BANCO ---
@@ -72,7 +68,7 @@ export default function Orcamentos() {
     loadPrices();
   }, []);
 
-  // --- CARREGA DADOS PARA EDIÇÃO (SE HOUVER DO HISTÓRICO) ---
+  // --- CARREGA DADOS PARA EDIÇÃO ---
   useEffect(() => {
     const editData = localStorage.getItem('jeisel_edit_pedido');
     if (editData) {
@@ -84,7 +80,7 @@ export default function Orcamentos() {
     }
   }, []);
 
-  // --- CÁLCULO DE FERRAGENS (DINÂMICO) ---
+  // --- CÁLCULO DE FERRAGENS ---
   const ferragensOptions = useMemo(() => {
     let options = [{ id: 'nenhum', nome: 'Cliente já possui trilho/varão', preco: 0 }];
     const temTecido = tecidoId !== 'nenhum';
@@ -105,26 +101,24 @@ export default function Orcamentos() {
     return options;
   }, [modeloId, tecidoId, forroId, dbModelos]);
 
-  // --- ADICIONAR OU ATUALIZAR ITEM NO CARRINHO ---
+  // --- ADICIONAR ITEM ---
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     const largNum = parseFloat(largura);
     const altNum = parseFloat(altura);
 
-    // ADICIONA 30CM PARA A BAINHA E ACABAMENTO SUPERIOR
     const consumoAltura = altNum + 0.30; 
 
     const modObj = dbModelos.find(m => m.id === modeloId);
     const tecObj = dbTecidos.find(t => t.id === tecidoId);
     const forObj = dbForros.find(f => f.id === forroId);
-    const cstObj = DB.costuras.find(c => c.id === costuraId)!;
 
     if (!tecObj || !forObj || !modObj) return alert("Selecione os materiais e o modelo.");
     if (tecObj.id === 'nenhum' && forObj.id === 'nenhum') return alert("Selecione tecido ou forro.");
 
     let detalhes = [];
     
-    // 1. Cálculo Tecido (Área M²: Largura x Fator x Altura com bainha)
+    // 1. Cálculo Tecido
     let custoTec = 0;
     if (tecObj.id !== 'nenhum') {
       let areaTec = (largNum * modObj.fator) * consumoAltura;
@@ -138,19 +132,17 @@ export default function Orcamentos() {
       });
     }
 
-    // 2. Cálculo Forro (Área M²)
+    // 2. Cálculo Forro
     let custoFor = 0;
     if (forObj.id !== 'nenhum') {
       let areaForro = 0;
       let eqForro = "";
       
       if (forObj.tipo_bk) {
-        // Se for Blackout, usa a fórmula de emendas e multiplica pela altura final
         let larguraBK = calcularConsumoBK(largNum);
         areaForro = larguraBK * consumoAltura;
         eqForro = `(${larguraBK.toFixed(2)}m larg. BK) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
       } else {
-        // Forro comum usa o fator (ou fator 1 se não tiver)
         let fatorForro = forObj.fator || 1;
         areaForro = (largNum * fatorForro) * consumoAltura;
         eqForro = `(${largNum}m × ${fatorForro}) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
@@ -160,18 +152,22 @@ export default function Orcamentos() {
       detalhes.push({ tipo: 'Forro', icon: <Palette size={20} className="text-purple-500" />, nome: forObj.nome, equacao: eqForro, valor: custoFor });
     }
 
-    // 3. Cálculo Confecção (Mantido por metro linear de janela)
-    let baseCustoCst = (tecObj.id !== 'nenhum' && forObj.id !== 'nenhum') ? cstObj.cort_forro : (tecObj.id !== 'nenhum' ? cstObj.so_cort : cstObj.so_forro);
-    let custoCst = baseCustoCst * largNum;
-    detalhes.push({ tipo: 'Confecção', icon: <Scissors size={20} className="text-orange-500" />, nome: cstObj.nome, equacao: `${largNum}m × ${formatBRL(baseCustoCst)}/m`, valor: custoCst });
+    // 3. Cálculo Confecção (Agora dinâmico do Banco)
+    let custoCst = modObj.preco * largNum;
+    detalhes.push({ 
+      tipo: 'Confecção', 
+      icon: <Scissors size={20} className="text-orange-500" />, 
+      nome: modObj.nome, 
+      equacao: `${largNum}m × ${formatBRL(modObj.preco)}/m`, 
+      valor: custoCst 
+    });
 
-    // 4. Cálculo Ferragem (Mantido por metro linear de janela)
+    // 4. Cálculo Ferragem
     let custoFer = servicoId !== 'nenhum' ? (largNum * ferragemPreco) : 0;
     if (custoFer > 0) {
       detalhes.push({ tipo: 'Ferragem', icon: <Wrench size={20} className="text-gray-500" />, nome: "Suporte/Trilho", equacao: `${largNum}m × ${formatBRL(ferragemPreco)}/m`, valor: custoFer });
     }
 
-    // Objeto do Item Finalizado
     const newItem = {
       id: editingCartItemId || Date.now(),
       nome: nomeAmbiente, largura: largNum, altura: altNum, servico: servicoId,
@@ -196,7 +192,6 @@ export default function Orcamentos() {
 
   const delItem = (id: number) => setCart(cart.filter(i => i.id !== id));
 
-  // --- PUXAR ITEM DO CARRINHO PRO FORMULÁRIO ---
   const editCartItem = (item: any) => {
     setNomeAmbiente(item.nome);
     setLargura(item.largura.toString());
@@ -215,7 +210,7 @@ export default function Orcamentos() {
     setNomeAmbiente(""); setLargura(""); setAltura("");
   };
 
-  // --- TOTAIS GLOBAIS (USANDO TAXAS DO BANCO) ---
+  // --- TOTAIS GLOBAIS ---
   const totais = useMemo(() => {
     if (!pricesLoaded) return { mat: 0, inst: 0, desl: 0, total: 0, globalDetalhes: [] };
 
@@ -242,7 +237,7 @@ export default function Orcamentos() {
     }
 
     let totalDesloc = 0;
-    let kmTotal = km * 2;
+    let kmTotal = (Number(km) || 0) * 2;
     if (kmTotal > dbTaxas.km_livre) {
       totalDesloc = (kmTotal - dbTaxas.km_livre) * dbTaxas.km_valor;
       globalDetalhes.push({ nome: 'Deslocamento Extra', desc: `${(kmTotal - dbTaxas.km_livre).toFixed(2)}km`, valor: totalDesloc });
@@ -251,7 +246,7 @@ export default function Orcamentos() {
     return { mat: totalMat, inst: totalInst, desl: totalDesloc, total: totalMat + totalInst + totalDesloc, globalDetalhes, taxaMinimaAplicada };
   }, [cart, km, dbTaxas, pricesLoaded]);
 
-  // --- FINALIZAR OU EDITAR PEDIDO ---
+  // --- FINALIZAR PEDIDO ---
   const finalizarPedido = async () => {
     if (cart.length === 0) return alert("Adicione itens!");
     const { data: { user } } = await supabase.auth.getUser();
@@ -283,14 +278,14 @@ export default function Orcamentos() {
     if (!error) { 
       setCart([]); 
       setCliente(""); 
-      setKm(0); 
+      setKm(""); 
       setEditId(null); 
       router.push('/historico'); 
     }
     else alert("Erro: " + error.message);
   };
 
-  if (!pricesLoaded) return <div className="p-10 text-center animate-pulse">Sincronizando preços com o banco...</div>;
+  if (!pricesLoaded) return <div className="p-10 text-center animate-pulse text-blue-600 font-bold">Sincronizando preços com o banco...</div>;
 
   return (
     <>
@@ -298,32 +293,39 @@ export default function Orcamentos() {
         <div className="space-y-6">
             
             {editId && (
-              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex items-center justify-between shadow-sm">
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                 <div>
                   <strong className="block text-sm">Modo de Edição Ativo</strong>
                   <span className="text-xs">Você está editando o Pedido #{editId}. Suas alterações substituirão o pedido original.</span>
                 </div>
                 <button 
                   onClick={() => { setEditId(null); setCart([]); setCliente(""); }} 
-                  className="px-3 py-1.5 bg-indigo-200 text-indigo-800 rounded-md text-xs font-bold hover:bg-indigo-300 transition"
+                  className="px-3 py-1.5 bg-indigo-200 text-indigo-800 rounded-md text-xs font-bold hover:bg-indigo-300 transition whitespace-nowrap"
                 >
                   Cancelar Edição
                 </button>
               </div>
             )}
 
+            {/* AREA DO CLIENTE COM LABELS UX/UI E RESPONSIVIDADE */}
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
               <h3 className="text-lg font-semibold text-blue-600 mb-4 pb-2 border-b">Dados do Cliente</h3>
-              <div className="flex flex-wrap gap-4">
-                <input type="text" placeholder="Nome do Cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} className="flex-1 p-2.5 border rounded-md" />
-                <input type="number" placeholder="KM (Ida)" value={km} onChange={(e) => setKm(Number(e.target.value))} className="w-32 p-2.5 border rounded-md" />
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px] gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Nome do Cliente</label>
+                  <input type="text" placeholder="Ex: João da Silva" value={cliente} onChange={(e) => setCliente(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Distância (KM Ida)</label>
+                  <input type="number" placeholder="Ex: 15" value={km} onChange={(e) => setKm(e.target.value ? Number(e.target.value) : "")} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition" />
+                </div>
               </div>
             </div>
 
             <div className={`bg-white p-6 rounded-lg border shadow-sm transition-all duration-300 ${editingCartItemId ? 'border-indigo-400 ring-4 ring-indigo-50' : 'border-gray-200'}`}>
               <div className="flex justify-between items-center mb-4 pb-2 border-b">
                 <h3 className={`text-lg font-semibold ${editingCartItemId ? 'text-indigo-600' : 'text-blue-600'}`}>
-                  {editingCartItemId ? 'Editando Ambiente...' : 'Janela/Ambiente'}
+                  {editingCartItemId ? 'Editando Ambiente...' : 'Montar Janela/Ambiente'}
                 </h3>
                 {editingCartItemId && (
                   <button onClick={cancelCartItemEdit} className="text-xs text-gray-400 hover:text-red-500 font-bold">
@@ -332,40 +334,79 @@ export default function Orcamentos() {
                 )}
               </div>
 
-              <form onSubmit={handleAddItem} className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <input type="text" value={nomeAmbiente} onChange={(e)=>setNomeAmbiente(e.target.value)} placeholder="Ambiente (Ex: Sala)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
-                  <input type="number" step="0.01" value={largura} onChange={(e)=>setLargura(e.target.value)} placeholder="Largura (m)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
-                  <input type="number" step="0.01" value={altura} onChange={(e)=>setAltura(e.target.value)} placeholder="Altura (m)" className="p-2.5 border rounded-md focus:border-indigo-500" required />
+              <form onSubmit={handleAddItem} className="space-y-5">
+                {/* MEDIDAS RESPONSIVO */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Nome do Ambiente</label>
+                    <input type="text" value={nomeAmbiente} onChange={(e)=>setNomeAmbiente(e.target.value)} placeholder="Ex: Sala de Estar" className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Largura (Metros)</label>
+                    <input type="number" step="0.01" value={largura} onChange={(e)=>setLargura(e.target.value)} placeholder="Ex: 2.50" className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Altura (Metros)</label>
+                    <input type="number" step="0.01" value={altura} onChange={(e)=>setAltura(e.target.value)} placeholder="Ex: 2.80" className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition" required />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {dbTecidos.map(t => <option key={t.id} value={t.id}>{t.nome} (R$ {t.preco}/m²)</option>)}
-                  </select>
-                  <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {dbForros.map(f => <option key={f.id} value={f.id}>{f.nome} (R$ {f.preco}/m²)</option>)}
-                  </select>
+                {/* MATERIAIS RESPONSIVO */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Escolha o Tecido</label>
+                    <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
+                      {dbTecidos.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.nome} {t.id !== 'nenhum' ? `(R$ ${t.preco}/m² ${t.fator > 0 ? `| Fator: ${t.fator}` : ''})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Escolha o Forro</label>
+                    <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
+                      {dbForros.map(f => (
+                        <option key={f.id} value={f.id}>
+                          {f.nome} {f.id !== 'nenhum' ? `(R$ ${f.preco}/m² ${f.fator > 0 ? `| Fator: ${f.fator}` : ''})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <select value={modeloId} onChange={(e)=>setModeloId(e.target.value)} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {dbModelos.map(m => <option key={m.id} value={m.id}>{m.nome} (Fator {m.fator})</option>)}
-                  </select>
-                  <select value={ferragemPreco} onChange={(e)=>setFerragemPreco(Number(e.target.value))} className="p-2.5 border rounded-md bg-white focus:border-indigo-500">
-                    {ferragensOptions.map(f => <option key={f.id} value={f.preco}>{f.nome}</option>)}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Modelo / Confecção</label>
+                    <select value={modeloId} onChange={(e)=>setModeloId(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
+                      {dbModelos.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.nome} (R$ {m.preco}/m {m.fator > 0 ? `| Fator: ${m.fator}` : ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Tipo de Ferragem</label>
+                    <select value={ferragemPreco} onChange={(e)=>setFerragemPreco(Number(e.target.value))} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
+                      {ferragensOptions.map(f => (
+                        <option key={f.id} value={f.preco}>
+                          {f.nome} {f.preco > 0 ? `(R$ ${f.preco.toFixed(2).replace('.', ',')}/m)` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <button type="submit" className={`w-full p-3 text-white rounded-md font-bold flex items-center justify-center gap-2 transition-colors ${editingCartItemId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                  {editingCartItemId ? <><Check size={20} weight="bold" /> Atualizar Ambiente</> : <><Plus size={20} weight="bold" /> Adicionar Ambiente</>}
+                <button type="submit" className={`w-full p-3.5 text-white rounded-md font-bold flex items-center justify-center gap-2 transition-colors shadow-md ${editingCartItemId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {editingCartItemId ? <><Check size={20} weight="bold" /> Atualizar Ambiente</> : <><Plus size={20} weight="bold" /> Adicionar ao Carrinho</>}
                 </button>
               </form>
             </div>
         </div>
 
         {/* Resumo Lateral e Botão do Modal */}
-        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm sticky top-6">
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm sticky top-6 self-start">
           <h3 className="text-lg font-semibold text-blue-600 mb-4 border-b pb-2">Resumo do Pedido</h3>
           
           <div className="max-h-[300px] overflow-y-auto mb-4 space-y-3 px-1">
@@ -378,7 +419,7 @@ export default function Orcamentos() {
                   <p className="text-xs text-gray-500 mt-1">{item.desc}</p>
                   <p className="text-sm mt-1 text-gray-700">Materiais: <strong className="text-blue-600">{formatBRL(item.mat_cost)}</strong></p>
                   
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex gap-1">
+                  <div className="absolute top-2 right-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition flex gap-1">
                     <button type="button" onClick={() => editCartItem(item)} className="p-1 bg-white text-indigo-500 border border-indigo-200 rounded hover:bg-indigo-500 hover:text-white transition shadow-sm">
                       <PencilSimple size={16} weight="bold" />
                     </button>
@@ -434,18 +475,18 @@ export default function Orcamentos() {
                   
                   <div className="divide-y divide-gray-100">
                     {item.detalhes_array?.map((det: any, i: number) => (
-                      <div key={i} className="px-5 py-4 flex items-start gap-4 hover:bg-gray-50 transition">
-                        <div className="p-2 bg-white border border-gray-100 rounded-md shadow-sm">{det.icon}</div>
+                      <div key={i} className="px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-4 hover:bg-gray-50 transition">
+                        <div className="hidden sm:block p-2 bg-white border border-gray-100 rounded-md shadow-sm">{det.icon}</div>
                         <div className="flex-1">
                           <h4 className="text-sm font-bold text-gray-800">{det.tipo}: <span className="font-normal text-gray-600">{det.nome}</span></h4>
-                          <p className="text-xs text-gray-500 mt-1 font-mono bg-gray-100 inline-block px-2 py-1 rounded">{det.equacao}</p>
+                          <p className="text-xs text-gray-500 mt-1 font-mono bg-gray-100 inline-block px-2 py-1 rounded break-all">{det.equacao}</p>
                         </div>
-                        <div className="text-sm font-semibold text-gray-800">{formatBRL(det.valor)}</div>
+                        <div className="text-sm font-semibold text-gray-800 sm:text-right mt-2 sm:mt-0">{formatBRL(det.valor)}</div>
                       </div>
                     ))}
                   </div>
 
-                  <div className="bg-blue-50/50 px-5 py-3 border-t flex justify-end items-center gap-4">
+                  <div className="bg-blue-50/50 px-5 py-3 border-t flex flex-col sm:flex-row justify-end items-center gap-2 sm:gap-4">
                     <span className="text-sm text-gray-600">Subtotal Materiais:</span>
                     <strong className="text-lg text-blue-700">{formatBRL(item.mat_cost)}</strong>
                   </div>
@@ -479,7 +520,7 @@ export default function Orcamentos() {
                   )}
                 </div>
 
-                <div className="bg-emerald-50/50 px-5 py-3 border-t border-emerald-200 flex justify-end items-center gap-4">
+                <div className="bg-emerald-50/50 px-5 py-3 border-t border-emerald-200 flex flex-col sm:flex-row justify-end items-center gap-2 sm:gap-4">
                   <span className="text-sm text-gray-600">Subtotal Serviços:</span>
                   <strong className="text-lg text-emerald-700">{formatBRL(totais.inst + totais.desl)}</strong>
                 </div>
