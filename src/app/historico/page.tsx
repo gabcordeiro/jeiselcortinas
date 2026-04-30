@@ -123,7 +123,7 @@ const formatBRL = (v: number) =>
     doc.setFontSize(18); // Aumentado de 14 para 18
     doc.setFont("Montserrat", "bold");
     doc.setLineWidth(0.15); // Engrossa o traço do título
-    doc.text("Orçamento", 105, 58, { align: "center", renderingMode: 'fillAndStroke' });
+    doc.text("Orçamento", 105, 58, { align: "center", renderingMode: 'fillThenStroke' });
 
     // 4. CORPO DO DOCUMENTO (Ambientes)
     let y = 75;
@@ -136,7 +136,7 @@ const formatBRL = (v: number) =>
       doc.setFont("Montserrat", "bold");
       doc.setLineWidth(0.08); // Engrossa levemente o nome do ambiente
       const ambienteTexto = `${item.nome}:`;
-      doc.text(ambienteTexto, 14, y, { renderingMode: 'fillAndStroke' });
+      doc.text(ambienteTexto, 14, y, { renderingMode: 'fillThenStroke' });
       
       // Linha sublinhada mais grossa
       doc.setLineWidth(0.3);
@@ -165,7 +165,7 @@ const formatBRL = (v: number) =>
     doc.setFontSize(13); // Aumentado para destaque
     doc.setFont("Montserrat", "bold");
     doc.setLineWidth(0.12);
-    doc.text(`VALOR: ${formatBRL(p.total)}`, 14, y, { renderingMode: 'fillAndStroke' });
+    doc.text(`VALOR: ${formatBRL(p.total)}`, 14, y, { renderingMode: 'fillThenStroke' });
 
     y += 18;
     
@@ -174,7 +174,7 @@ const formatBRL = (v: number) =>
     const infoComSublinhado = (titulo: string, texto: string, posY: number) => {
       doc.setFont("Montserrat", "bold");
       doc.setLineWidth(0.1);
-      doc.text(titulo, 14, posY, { renderingMode: 'fillAndStroke' });
+      doc.text(titulo, 14, posY, { renderingMode: 'fillThenStroke' });
       
       const w = doc.getTextWidth(titulo);
       doc.setLineWidth(0.3);
