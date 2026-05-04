@@ -118,38 +118,57 @@ export default function Orcamentos() {
 
     let detalhes = [];
     
-    // 1. Cálculo Tecido
+// 1. Cálculo Tecido (Cálculo Focado no METRO LINEAR, não mais em M²)
     let custoTec = 0;
     if (tecObj.id !== 'nenhum') {
-      let areaTec = (largNum * modObj.fator) * consumoAltura;
-      custoTec = areaTec * tecObj.preco;
+      // Calculamos a metragem linear: Largura da Janela x Fator de Franzimento
+      let metragemLinear = largNum * modObj.fator;
+      
+      // O CUSTO agora é apenas a metragem linear x o preço do tecido
+      custoTec = metragemLinear * tecObj.preco;
+      
+      // A área total (m²) a gente ainda calcula só para mostrar a informação, mas não entra no dinheiro
+      let areaTec = metragemLinear * consumoAltura;
+
       detalhes.push({ 
         tipo: 'Tecido', 
         icon: <Palette size={20} className="text-blue-500" />, 
         nome: tecObj.nome, 
-        equacao: `(${largNum}m × ${modObj.fator}) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaTec.toFixed(2)}m²`, 
+        equacao: `Linear: (${largNum}m × ${modObj.fator}) = ${metragemLinear.toFixed(2)}m (R$ ${formatBRL(custoTec)}) | Área Total: ${areaTec.toFixed(2)}m²`, 
         valor: custoTec 
       });
     }
 
-    // 2. Cálculo Forro
+   // 2. Cálculo Forro (Cálculo Focado no METRO LINEAR)
     let custoFor = 0;
     if (forObj.id !== 'nenhum') {
+      let metragemLinearForro = 0;
       let areaForro = 0;
       let eqForro = "";
       
       if (forObj.tipo_bk) {
-        let larguraBK = calcularConsumoBK(largNum);
-        areaForro = larguraBK * consumoAltura;
-        eqForro = `(${larguraBK.toFixed(2)}m larg. BK) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
+        // Se for Blackout
+        metragemLinearForro = calcularConsumoBK(largNum);
+        areaForro = metragemLinearForro * consumoAltura;
+        eqForro = `Linear BK: ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m²`;
       } else {
+        // Forro comum
         let fatorForro = forObj.fator || 1;
-        areaForro = (largNum * fatorForro) * consumoAltura;
-        eqForro = `(${largNum}m × ${fatorForro}) × ${consumoAltura.toFixed(2)}m (Alt+0.30) = ${areaForro.toFixed(2)}m²`;
+        metragemLinearForro = largNum * fatorForro;
+        areaForro = metragemLinearForro * consumoAltura;
+        eqForro = `Linear: (${largNum}m × ${fatorForro}) = ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m²`;
       }
       
-      custoFor = areaForro * forObj.preco;
-      detalhes.push({ tipo: 'Forro', icon: <Palette size={20} className="text-purple-500" />, nome: forObj.nome, equacao: eqForro, valor: custoFor });
+      // O CUSTO agora é apenas a metragem linear x o preço do forro
+      custoFor = metragemLinearForro * forObj.preco;
+
+      detalhes.push({ 
+        tipo: 'Forro', 
+        icon: <Palette size={20} className="text-purple-500" />, 
+        nome: forObj.nome, 
+        equacao: eqForro, 
+        valor: custoFor 
+      });
     }
 
     // 3. Cálculo Confecção (Agora dinâmico do Banco)
