@@ -118,7 +118,7 @@ export default function Orcamentos() {
 
     let detalhes = [];
     
-// 1. Cálculo Tecido (Cálculo Focado no METRO LINEAR, não mais em M²)
+// 1. Cálculo Tecido (Cálculo Focado no METRO LINEAR, não mais em m)
     let custoTec = 0;
     if (tecObj.id !== 'nenhum') {
       // Calculamos a metragem linear: Largura da Janela x Fator de Franzimento
@@ -127,14 +127,14 @@ export default function Orcamentos() {
       // O CUSTO agora é apenas a metragem linear x o preço do tecido
       custoTec = metragemLinear * tecObj.preco;
       
-      // A área total (m²) a gente ainda calcula só para mostrar a informação, mas não entra no dinheiro
+      // A área total (m) a gente ainda calcula só para mostrar a informação, mas não entra no dinheiro
       let areaTec = metragemLinear * consumoAltura;
 
       detalhes.push({ 
         tipo: 'Tecido', 
         icon: <Palette size={20} className="text-blue-500" />, 
         nome: tecObj.nome, 
-        equacao: `Linear: (${largNum}m × ${modObj.fator}) = ${metragemLinear.toFixed(2)}m (R$ ${formatBRL(custoTec)}) | Área Total: ${areaTec.toFixed(2)}m²`, 
+        equacao: `Linear: (${largNum}m × ${modObj.fator}) = ${metragemLinear.toFixed(2)}m (${formatBRL(custoTec)}) | Área Total: ${areaTec.toFixed(2)}m`, 
         valor: custoTec 
       });
     }
@@ -150,13 +150,13 @@ export default function Orcamentos() {
         // Se for Blackout
         metragemLinearForro = calcularConsumoBK(largNum);
         areaForro = metragemLinearForro * consumoAltura;
-        eqForro = `Linear BK: ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m²`;
+        eqForro = `Linear BK: ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m`;
       } else {
         // Forro comum
         let fatorForro = forObj.fator || 1;
         metragemLinearForro = largNum * fatorForro;
         areaForro = metragemLinearForro * consumoAltura;
-        eqForro = `Linear: (${largNum}m × ${fatorForro}) = ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m²`;
+        eqForro = `Linear: (${largNum}m × ${fatorForro}) = ${metragemLinearForro.toFixed(2)}m | Área Total: ${areaForro.toFixed(2)}m`;
       }
       
       // O CUSTO agora é apenas a metragem linear x o preço do forro
@@ -377,7 +377,7 @@ export default function Orcamentos() {
                     <select value={tecidoId} onChange={(e)=>setTecidoId(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
                       {dbTecidos.map(t => (
                         <option key={t.id} value={t.id}>
-                          {t.nome} {t.id !== 'nenhum' ? `(R$ ${t.preco}/m² ${t.fator > 0 ? `| Fator: ${t.fator}` : ''})` : ''}
+                          {t.nome} {t.id !== 'nenhum' ? `(R$ ${t.preco}/m ${t.fator > 0 ? `| Fator: ${t.fator}` : ''})` : ''}
                         </option>
                       ))}
                     </select>
@@ -387,7 +387,7 @@ export default function Orcamentos() {
                     <select value={forroId} onChange={(e)=>setForroId(e.target.value)} className="w-full p-2.5 border rounded-md bg-gray-50 focus:bg-white focus:border-indigo-500 outline-none transition">
                       {dbForros.map(f => (
                         <option key={f.id} value={f.id}>
-                          {f.nome} {f.id !== 'nenhum' ? `(R$ ${f.preco}/m² ${f.fator > 0 ? `| Fator: ${f.fator}` : ''})` : ''}
+                          {f.nome} {f.id !== 'nenhum' ? `(R$ ${f.preco}/m ${f.fator > 0 ? `| Fator: ${f.fator}` : ''})` : ''}
                         </option>
                       ))}
                     </select>
